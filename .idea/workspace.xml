@@ -4,7 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="aa3423b8-248e-413f-b0aa-dfe7283b1e99" name="Changes" comment="First Commit" />
+    <list default="true" id="aa3423b8-248e-413f-b0aa-dfe7283b1e99" name="Changes" comment="First Commit">
+      <change afterPath="$PROJECT_DIR$/rwh.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/Bayesian.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Bayesian.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Random_Walk_Metropolis_Hastings.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/Random_Walk_Metropolis_Hastings.ipynb" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -32,15 +38,15 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/manmadeharp/Bayesian-Project.git",
-    "accountId": "1c8c34fc-2ef5-4232-99fe-7a134038b99a"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/manmadeharp/Bayesian-Project.git&quot;,
+    &quot;accountId&quot;: &quot;1c8c34fc-2ef5-4232-99fe-7a134038b99a&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 2
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 2
+}</component>
   <component name="ProjectId" id="2moOf8Pdhov1vw9FOLnvF2m63Q6" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
@@ -58,15 +64,15 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "MTHome",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-5c90d61e3bab-JavaScript-PY-242.23339.19" />
-        <option value="bundled-python-sdk-0029f7779945-399fe30bd8c1-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-242.23339.19" />
+        <option value="bundled-js-predefined-d6986cc7102b-bd4b0a03caa6-JavaScript-PY-243.16718.36" />
+        <option value="bundled-python-sdk-09715afb1fcd-ca77fbc60dd9-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.16718.36" />
       </set>
     </attachedChunks>
   </component>
@@ -79,6 +85,7 @@
       <option name="presentableId" value="Default" />
       <updated>1727739565046</updated>
       <workItem from="1727739569429" duration="27461000" />
+      <workItem from="1727863413881" duration="3843000" />
     </task>
     <task id="LOCAL-00001" summary="First Commit">
       <option name="closed" value="true" />
