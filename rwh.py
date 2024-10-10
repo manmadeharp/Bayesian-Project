@@ -42,7 +42,6 @@ class RWMH:
 
     def log_likelihood(self, theta):
         #m, c = theta[0], theta[1]
-
         # print(m, c)
         return np.sum(-1 / 2 * (((self.data - self.model(theta, self.m, self.b)) / self.sigma) ** 2))
 
@@ -62,16 +61,10 @@ class RWMH:
 
     def plot_samples(self):
         plt.figure(figsize=(12, 6))
-        plt.subplot(111)
+        plt.subplot(221)
         plt.plot(self.theta[:, 0], label='value')
         plt.legend()
         plt.title('Parameter Sample Path')
-
-        #plt.figure(figsize=(12, 6))
-        #plt.subplot(122)
-        #plt.plot(self.theta[:, 1], label='Intercept')
-        #plt.legend()
-        #plt.title('Parameter Sample Path')
 
     def plot_error(self):
         plt.figure(figsize=(12, 6))
@@ -97,18 +90,6 @@ class RWMH:
         plt.title("Parameter distributions")
         plt.legend(loc=1)
 
-    # TODO: Implement a method to sample the parameters in a step by step manner
-    def sample_step(self):
-        if len(self.theta) < self.samples:
-            theta_proposed = np.random.normal(self.theta[-1], self.sigma ** 2, self.theta[-1].shape)
-            alpha = min(self.proposal_ratio(theta_proposed, self.theta[-1]), 1)
-            if np.log(np.random.random()) < alpha:
-                self.theta = np.vstack([self.theta, theta_proposed])
-            else:
-                self.theta = np.vstack([self.theta, self.theta[-1]])
-        return self.theta[-1]
-
-
 l = LinearData(100, 50, 10, 100)
 
 l.generate_data()
@@ -121,7 +102,7 @@ r.plot_samples()
 #plt.show()
 
 print("Estimated Parameters: ", r.theta[-1, :])
-print("True parameters(m, c): ", l.x, l.y)
+print("True parameters(m, c): ", l.x)
 print("error: ", r.theta[-1] - l.x) 
 #
 #r.distribution_plot()
