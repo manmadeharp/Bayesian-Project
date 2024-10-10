@@ -4,7 +4,7 @@ import inspect
 import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
-from typing import Tuple, Callable
+from typing import Tuple, Callable, List
 
 from panel.pane.vtk.synchronizable_serializer import linspace
 from scipy import stats
@@ -12,13 +12,20 @@ from scipy import stats
 def linear_model(x, m, c):
     return m * x + c
 
+"""
+Important changes, adding the prior to the calculations smooths out the distribution and improves the shape of the pdf
+The greater the variance the more the state space is explored and the lower the acceptance rate is.
+The further the current parameter value is from the true value the greater the rate of acceptance.
+The acceptance rate is a measure of the efficiency of the algorithm.
+"""
+
 class LinearData:
     def __init__(self, m: float, b: float, sigma: float, size: int = 1):
         self.m = m
         self.b = b
         self.sigma = sigma
         self.size = size
-        self.x = np.random.normal(0, 100, self.size) #np.linspace(0, 100, size)
+        self.x = np.random.uniform(0, 100, self.size) #np.linspace(0, 100, size)
         self.y = self.generate_data()
 
     def generate_data(self) -> NDArray[np.float64]:
@@ -61,11 +68,13 @@ class RWMH:
         :param theta_current:
         :return:
         """
-        return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current)
+        log_prior = 0#stats.norm.logpdf(theta_proposed, loc=self.theta[0], scale=self.sigma) - stats.norm.logpdf(theta_current, loc=self.theta[0], scale=self.sigma)
+        return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current) + log_prior
 
     def acceptance_rate(self):
         # Acceptance rate
-        rate = self.accept_count/self.theta.shape[0]
+        rate = self.accept_count/self.theta.size
+        # self.sigma = 1/max(rate*self.sigma, 0.01)
         # self.sigma = np.exp(1 * (rate - 0.234))
         self.accept_rate = np.append(self.accept_rate, rate)
 
@@ -85,7 +94,7 @@ class RWMH:
 
     def burning(self, number: int):
         """
-        Remove the first 'burnin' number of samples from theta and adjust accept_count.
+        Remove the first number of samples from theta and adjust accept_count.
 
         :param number: number of samples to remove
         """
@@ -112,20 +121,27 @@ class RWMH:
         :return:
         """
 
+    def autocorrelation(self, lag: int = 50) -> NDArray[np.float64]:
+        """
+        Calculate autocorrelation.
+        """
+        y = self.theta.flatten() - np.mean(self.theta)
+        result = np.correlate(y, y, mode='full')
+        result = result[result.size // 2:]
+        return result[:lag] / result[0]
 
     def plot_samples(self):
         plt.figure(figsize=(15, 10))
         plt.subplot(2, 2, 1)
         plt.plot(np.linspace(1, self.theta.size, self.theta.size), self.theta[:], label='param')
         plt.plot(l.x, 'ro', label='true param value')
-        plt.plot(l.y, 'bo', label='observed value')
+        # plt.plot(l.y, 'bo', label='observed value')
         plt.legend()
         plt.title('Parameter Sample Path')
 
         plt.subplot(2, 2, 2)
         plt.hist(self.theta, bins=50)
         plt.title('Probability density')
-
         x_range = np.linspace(np.min(self.theta), np.max(self.theta), self.theta.size)
 
         plt.subplot(2, 2, 3)
@@ -135,14 +151,25 @@ class RWMH:
         plt.title('Empirical Distribution')
         plt.xlabel('θ')
         plt.ylabel('F(θ)')
-
+        plt.legend()
         plt.subplot(2, 2, 4)
 
-        kde = stats.gaussian_kde(np.sort(self.theta.flatten()))
-        plt.plot(x_range, kde(x_range), label='Sample PDF (KDE)')
+        print("sigma: ", self.sigma)
+
+        kde_quarter = stats.gaussian_kde(self.theta[:self.theta.size//4].flatten())
+        plt.plot(x_range, kde_quarter(x_range), label='Sample PDF (KDE) quarter', linestyle='--')
+
+        kde_half = stats.gaussian_kde(self.theta[:self.theta.size//2].flatten())
+        plt.plot(x_range, kde_half(x_range), label='Sample PDF (KDE) half', linestyle='--')
+
+        kde_qu_th = stats.gaussian_kde(self.theta[:3*self.theta.size//4].flatten())
+        plt.plot(x_range, kde_qu_th(x_range), label='Sample PDF (KDE) third quarter', linestyle='--')
+
+        kde_final = stats.gaussian_kde(self.theta.flatten())
+        plt.plot(x_range, kde_final(x_range), label='Sample PDF (KDE)', linestyle='--')
 
         true_pdf = stats.norm.pdf(x_range, loc=l.x, scale=l.sigma)
-        plt.plot(x_range, true_pdf, label='True PDF', linestyle='--')
+        plt.plot(x_range, true_pdf, label='True PDF', linestyle='-', color='r')
 
         plt.title('Sample PDF vs True PDF')
         plt.xlabel('θ')
@@ -150,15 +177,33 @@ class RWMH:
         plt.legend()
         plt.show()
 
-l = LinearData(2, 3, 10)
-l.plot_data()
-r = RWMH(linear_model, np.array([40]), 10000, l.m, l.b, l.y)
+    def plot_autocorrelation(self, lag: int = 50):
+        """
+        Plot the autocorrelation function.
+        """
+        acf = self.autocorrelation(lag)
+        plt.figure(figsize=(10, 5))
+        plt.bar(range(len(acf)), acf, alpha=0.5)
+        plt.plot(range(len(acf)), acf, 'r--', linewidth=2)
+        plt.title('Autocorrelation Function')
+        plt.xlabel('Lag')
+        plt.ylabel('Autocorrelation')
+        plt.axhline(y=0, color='black', linestyle='--')
+        plt.axhline(y=-1.96 / np.sqrt(len(self.theta)), color='b', linestyle='--')
+        plt.axhline(y=1.96 / np.sqrt(len(self.theta)), color='b', linestyle='--')
+        plt.show()
 
-for i in range(100000):
+l = LinearData(2, 3, 1)
+l.plot_data()
+r = RWMH(linear_model, np.array([50]), 2, l.m, l.b, l.y)
+
+for i in range(20000):
+    if i == 1005:
+        r.burning(1000)
+
     r.sample()
     r.acceptance_rate()
 
-r.burning(1)
 r.plot_samples()
 
 def error_plots(x, x_hat):
@@ -170,15 +215,21 @@ def error_plots(x, x_hat):
 
     # Create the plot
     plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
     plt.plot(abs_error, label='Absolute Error')
-    plt.plot(running_mean, 'r--', label='Running Mean', linewidth=2)
-    plt.axhline(np.mean(x_hat), color='g', linestyle=':', label='Mean Value')
-    plt.axhline(l.x, color='r', linestyle=':', label='True Value')
-
-    plt.legend()
     plt.title('Parameter Estimation Error')
     plt.xlabel('Iteration')
     plt.ylabel('Error / Estimate')
+    plt.subplot(1, 2, 2)
+    plt.plot(running_mean, 'r--', label='Running Mean', linewidth=2)
+    plt.axhline(np.mean(x_hat), color='g', linestyle=':', label='Mean Value')
+    plt.axhline(l.x, color='r', linestyle=':', label='True Value')
+    plt.title('Mean Values')
+    plt.xlabel('Iteration')
+    plt.ylabel('$\\theta$')
+    plt.legend()
+
+
     # plt.yscale('log')  # Use log scale for better visualization
     plt.show()
 
@@ -188,8 +239,9 @@ def acceptance_plot(acceptance):
     plt.title('acceptance rate')
     plt.show()
 
-error_plots(l.y, r.theta)
+error_plots(l.x, r.theta)
 acceptance_plot(r.accept_rate)
+r.plot_autocorrelation()
 #
 #
 # class RWMH:
