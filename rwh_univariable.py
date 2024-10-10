@@ -126,20 +126,35 @@ class RWMH:
         plt.hist(self.theta, bins=50)
         plt.title('Probability density')
 
+        x_range = np.linspace(np.min(self.theta), np.max(self.theta), self.theta.size)
+
         plt.subplot(2, 2, 3)
-        y = [self.empirical_distribution(i) for i in linspace(np.min(self.theta), np.max(self.theta), self.theta.size)]
+        y = [self.empirical_distribution(I) for I in x_range]
         plt.plot(linspace(np.min(self.theta), np.max(self.theta), self.theta.size), y, label='Empirical CDF')
         plt.plot(l.x, self.empirical_distribution(l.x), 'bo', label='F(True Param Value)')
         plt.title('Empirical Distribution')
         plt.xlabel('θ')
         plt.ylabel('F(θ)')
+
+        plt.subplot(2, 2, 4)
+
+        kde = stats.gaussian_kde(np.sort(self.theta.flatten()))
+        plt.plot(x_range, kde(x_range), label='Sample PDF (KDE)')
+
+        true_pdf = stats.norm.pdf(x_range, loc=l.x, scale=l.sigma)
+        plt.plot(x_range, true_pdf, label='True PDF', linestyle='--')
+
+        plt.title('Sample PDF vs True PDF')
+        plt.xlabel('θ')
+        plt.ylabel('Density')
+        plt.legend()
         plt.show()
 
 l = LinearData(2, 3, 10)
 l.plot_data()
 r = RWMH(linear_model, np.array([40]), 10000, l.m, l.b, l.y)
 
-for i in range(1000):
+for i in range(100000):
     r.sample()
     r.acceptance_rate()
 
