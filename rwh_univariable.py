@@ -57,7 +57,7 @@ class RWMH:
 
     def log_likelihood(self, theta):
         # Takes the Gaussian likelihood of the data and the model given the current theta
-        return np.sum(-1 / 2 * ((self.data - self.model(theta, self.m, self.b)) ** 2 / self.sigma))
+        return np.sum(-1 / 2 * ((self.data - self.model(theta, self.m, self.b)) / self.sigma) ** 2)
 
     def proposal_ratio(self, theta_proposed, theta_current):
         """
@@ -68,7 +68,8 @@ class RWMH:
         :param theta_current:
         :return:
         """
-        log_prior = 0#stats.norm.logpdf(theta_proposed, loc=self.theta[0], scale=self.sigma) - stats.norm.logpdf(theta_current, loc=self.theta[0], scale=self.sigma)
+        # print("mean of theta: ", np.mean(self.theta))
+        log_prior = 0#stats.norm.logpdf(theta_proposed, loc=np.mean(self.theta), scale=np.mean(self.sigma)) - stats.norm.logpdf(theta_current, loc=np.mean(self.theta), scale=np.mean(self.sigma))
         return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current) + log_prior
 
     def acceptance_rate(self):
@@ -100,8 +101,10 @@ class RWMH:
         """
         if number >= self.theta.shape[0]:
             raise ValueError("Burning period cannot be longer than or equal to the total number of samples.")
-
+        print("Burning period: ", number)
+        print("Theta Before: ", self.theta)
         self.theta = self.theta[number:]
+        print("Theta After: ", self.theta)
         self.accept_count = np.sum(self.theta[1:] != self.theta[:-1])
         self.accept_rate = self.accept_rate[number:]
 
@@ -154,8 +157,6 @@ class RWMH:
         plt.legend()
         plt.subplot(2, 2, 4)
 
-        print("sigma: ", self.sigma)
-
         kde_quarter = stats.gaussian_kde(self.theta[:self.theta.size//4].flatten())
         plt.plot(x_range, kde_quarter(x_range), label='Sample PDF (KDE) quarter', linestyle='--')
 
@@ -166,7 +167,7 @@ class RWMH:
         plt.plot(x_range, kde_qu_th(x_range), label='Sample PDF (KDE) third quarter', linestyle='--')
 
         kde_final = stats.gaussian_kde(self.theta.flatten())
-        plt.plot(x_range, kde_final(x_range), label='Sample PDF (KDE)', linestyle='--')
+        plt.plot(x_range, kde_final(x_range), label='Sample PDF (KDE)', linestyle='-', color='b')
 
         true_pdf = stats.norm.pdf(x_range, loc=l.x, scale=l.sigma)
         plt.plot(x_range, true_pdf, label='True PDF', linestyle='-', color='r')
@@ -189,17 +190,17 @@ class RWMH:
         plt.xlabel('Lag')
         plt.ylabel('Autocorrelation')
         plt.axhline(y=0, color='black', linestyle='--')
-        plt.axhline(y=-1.96 / np.sqrt(len(self.theta)), color='b', linestyle='--')
-        plt.axhline(y=1.96 / np.sqrt(len(self.theta)), color='b', linestyle='--')
+        plt.axhline(y=-1.96 / np.sqrt(self.theta.size), color='b', linestyle='--')
+        plt.axhline(y=1.96 / np.sqrt(self.theta.size), color='b', linestyle='--')
         plt.show()
 
 l = LinearData(2, 3, 1)
 l.plot_data()
-r = RWMH(linear_model, np.array([50]), 2, l.m, l.b, l.y)
+r = RWMH(linear_model, np.array([50]), 5, l.m, l.b, l.y)
 
 for i in range(20000):
-    if i == 1005:
-        r.burning(1000)
+    # if i == 2005:
+    #     r.burning(2000)
 
     r.sample()
     r.acceptance_rate()
