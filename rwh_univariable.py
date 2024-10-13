@@ -199,7 +199,10 @@ l.plot_data()
 r = RWMH(linear_model, np.array([50]), 5, l.m, l.b, l.y)
 
 for i in range(20000):
-    # if i == 2005:
+    if i == 10005:
+        r.sigma = 2
+    if i == 15000:
+        r.sigma = 0.5
     #     r.burning(2000)
 
     r.sample()
@@ -243,97 +246,3 @@ def acceptance_plot(acceptance):
 error_plots(l.x, r.theta)
 acceptance_plot(r.accept_rate)
 r.plot_autocorrelation()
-#
-#
-# class RWMH:
-#     def __init__(self, prop_model, theta_0, sigma_0, m, b, y, data_sigma):
-#         self.model = prop_model
-#         self.theta = np.array([theta_0]).reshape(-1, 1)
-#         self.sigma = sigma_0
-#         self.m = m
-#         self.b = b
-#         self.data = y.reshape(-1, 1)
-#         self.data_sigma = data_sigma
-#         self.accept_count = 0
-#         self.accept_rate = []
-#         self.log_likelihoods = []
-#
-#     def log_likelihood(self, theta):
-#         predicted = self.model(self.m, theta, self.b)
-#         ll = np.sum(-0.5 * ((self.data - predicted) / self.data_sigma) ** 2)
-#         return ll
-#
-#     def proposal_ratio(self, theta_proposed, theta_current):
-#         ll_proposed = self.log_likelihood(theta_proposed)
-#         ll_current = self.log_likelihood(theta_current)
-#         self.log_likelihoods.append(ll_current)
-#         return ll_proposed - ll_current
-#
-#     def sample(self):
-#         current_theta = self.theta[-1]
-#         # Use a mixture of local and global proposals
-#         if np.random.random() < 0.9:  # 90% local proposals
-#             theta_proposed = current_theta + np.random.normal(0, self.sigma, current_theta.shape)
-#         else:  # 10% global proposals
-#             theta_proposed = np.random.uniform(0, 100, current_theta.shape)
-#
-#         alpha = min(self.proposal_ratio(theta_proposed, current_theta), 1)
-#         if np.log(np.random.random()) < alpha:
-#             self.theta = np.vstack([self.theta, theta_proposed])
-#             self.accept_count += 1
-#         else:
-#             self.theta = np.vstack([self.theta, current_theta])
-#
-#         if self.theta.shape[0] % 1000 == 0:
-#             print(f"Iteration {self.theta.shape[0]}, Current theta: {current_theta.flatten()}, Proposed: {theta_proposed.flatten()}, Accepted: {self.theta[-1].flatten() != current_theta.flatten()}")
-#
-#     def run_chain(self, n_iterations):
-#         for _ in range(n_iterations):
-#             self.sample()
-#             if _ % 100 == 0:
-#                 self.acceptance_rate()
-#
-#         # Check if the chain has moved at all
-#         if np.all(self.theta[0] == self.theta[-1]):
-#             print("Warning: The chain hasn't moved from its starting position!")
-#
-#     def acceptance_rate(self):
-#         rate = self.accept_count / self.theta.shape[0]
-#         self.accept_rate.append(rate)
-#
-#     def plot_diagnostics(self):
-#         plt.figure(figsize=(15, 10))
-#
-#         plt.subplot(2, 2, 1)
-#         for i in range(self.theta.shape[1]):
-#             plt.plot(self.theta[:, i], label=f'x_{i}')
-#         plt.title('Parameter Traces')
-#         plt.legend()
-#
-#         plt.subplot(2, 2, 2)
-#         plt.plot(self.accept_rate)
-#         plt.title('Acceptance Rate')
-#
-#         plt.subplot(2, 2, 3)
-#         plt.plot(self.log_likelihoods)
-#         plt.title('Log-Likelihood Trace')
-#
-#         plt.subplot(2, 2, 4)
-#         plt.hist(self.theta.flatten(), bins=50)
-#         plt.title('Parameter Histogram')
-#
-#         plt.tight_layout()
-#         plt.show()
-#
-#
-# # Usage
-# l = LinearData(2, 3, 10, size=5)
-# l.plot_data()
-#
-# initial_x = np.random.uniform(0, 100, l.y.shape)
-# r = RWMH(linear_model, initial_x, 1, l.m, l.b, l.y, l.sigma)
-#
-# r.run_chain(50000)
-# r.plot_diagnostics()
-#
-# error_plots(l.x, r.theta)
