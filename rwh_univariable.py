@@ -1,17 +1,32 @@
 import inspect
-
-# from rwh import LinearData
 import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 from typing import Tuple, Callable, List
 
-from panel.pane.vtk.synchronizable_serializer import linspace
 from scipy import stats
 
 def linear_model(x, m, c):
     return m * x + c
 
+def closest_point_x(point: tuple[float, float], m: float, c: float, ):
+    a, b = point
+
+    # Line perpendicular to the original line
+    m_perpendicular = -1 / m if m != 0 else float('inf')
+
+    # y-intercept of the perpendicular line
+    c_perpendicular = b - m_perpendicular * a
+
+    # Find intersection point
+    if m_perpendicular != float('inf'):
+        x = (c_perpendicular - c) / (m - m_perpendicular)
+        y = m * x + c
+    else:  # Case when original line is horizontal
+        x = a
+        y = m * x + c
+
+    return x, y
 """
 Important changes, adding the prior to the calculations smooths out the distribution and improves the shape of the pdf
 The greater the variance the more the state space is explored and the lower the acceptance rate is.
@@ -30,11 +45,12 @@ class LinearData:
 
     def generate_data(self) -> NDArray[np.float64]:
         noise = np.random.normal(0, self.sigma, self.size)
-        print(noise)
         return linear_model(self.x, self.m, self.b) + noise
 
     def plot_data(self):
         plt.scatter(self.x, self.y, alpha=0.5)
+        # x, y = closest_point_x(tuple([ self.x, self.y[0] ]), self.m, self.b)
+        plt.scatter((np.mean(l.y) - l.b)/l.m, self.y, label='Closest Point on line')
         plt.plot(np.linspace(0, 100, 100), linear_model(np.linspace(0, 100, 100), self.m, self.b), 'r-', label='True Line')
         plt.legend()
         plt.show()
@@ -44,7 +60,9 @@ class LinearData:
 
 # Poor Mixing
 class RWMH:
-    def __init__(self, prop_model: Callable, theta_0: NDArray[np.float64], sigma_0,  m: float, b: float, y: NDArray[np.float64]):
+    def __init__(self, prop_model: Callable, theta_0: NDArray[np.float64],
+                 sigma_0, m: float, b: float, y: NDArray[np.float64],
+                 prior_theta: float):
         self.model = prop_model
         self.theta: NDArray[np.float64] = np.array([theta_0])  # theta in a row array
         self.sigma = sigma_0
@@ -54,6 +72,7 @@ class RWMH:
         self.data = y
         self.accept_count = 0
         self.accept_rate = np.array([0])
+        self.prior_theta = prior_theta
 
     def log_likelihood(self, theta):
         # Takes the Gaussian likelihood of the data and the model given the current theta
@@ -68,15 +87,12 @@ class RWMH:
         :param theta_current:
         :return:
         """
-        # print("mean of theta: ", np.mean(self.theta))
-        log_prior = 0#stats.norm.logpdf(theta_proposed, loc=np.mean(self.theta), scale=np.mean(self.sigma)) - stats.norm.logpdf(theta_current, loc=np.mean(self.theta), scale=np.mean(self.sigma))
+        log_prior = stats.norm.logpdf(theta_proposed, loc=self.prior_theta, scale=5) - stats.norm.logpdf(theta_current, loc=self.prior_theta, scale=5)
         return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current) + log_prior
 
     def acceptance_rate(self):
         # Acceptance rate
         rate = self.accept_count/self.theta.size
-        # self.sigma = 1/max(rate*self.sigma, 0.01)
-        # self.sigma = np.exp(1 * (rate - 0.234))
         self.accept_rate = np.append(self.accept_rate, rate)
 
     def sample(self):
@@ -86,7 +102,8 @@ class RWMH:
         """
         theta_proposed = np.random.normal(self.theta[-1], self.sigma, self.theta[-1].shape)
         alpha = self.proposal_ratio(theta_proposed, self.theta[-1]) # minimum is 0 instead of 1 since log(1) = 0
-        if np.log(np.random.random()) < alpha:
+        uniform = np.log(np.random.random())
+        if uniform < alpha:
             self.theta = np.vstack([self.theta, theta_proposed]) # add the proposed theta to the stack
             self.accept_count += 1
         else:
@@ -138,20 +155,19 @@ class RWMH:
         plt.subplot(2, 2, 1)
         plt.plot(np.linspace(1, self.theta.size, self.theta.size), self.theta[:], label='param')
         plt.plot(l.x, 'ro', label='true param value')
-        # plt.plot(l.y, 'bo', label='observed value')
         plt.legend()
         plt.title('Parameter Sample Path')
 
         plt.subplot(2, 2, 2)
         plt.hist(self.theta, bins=50)
-        plt.title('Probability density')
+        plt.title('Parameter Sample Histogram')
         x_range = np.linspace(np.min(self.theta), np.max(self.theta), self.theta.size)
 
         plt.subplot(2, 2, 3)
         y = [self.empirical_distribution(I) for I in x_range]
-        plt.plot(linspace(np.min(self.theta), np.max(self.theta), self.theta.size), y, label='Empirical CDF')
+        plt.plot(np.linspace(np.min(self.theta), np.max(self.theta), self.theta.size), y, label='Empirical CDF')
         plt.plot(l.x, self.empirical_distribution(l.x), 'bo', label='F(True Param Value)')
-        plt.title('Empirical Distribution')
+        plt.title('Empirical Cumulative Distribution')
         plt.xlabel('θ')
         plt.ylabel('F(θ)')
         plt.legend()
@@ -163,7 +179,7 @@ class RWMH:
         kde_half = stats.gaussian_kde(self.theta[:self.theta.size//2].flatten())
         plt.plot(x_range, kde_half(x_range), label='Sample PDF (KDE) half', linestyle='--')
 
-        kde_qu_th = stats.gaussian_kde(self.theta[:3*self.theta.size//4].flatten())
+        kde_qu_th = stats.gaussian_kde(self.theta[:3*self.theta.size//4].flatten(), bw_method='scott')
         plt.plot(x_range, kde_qu_th(x_range), label='Sample PDF (KDE) third quarter', linestyle='--')
 
         kde_final = stats.gaussian_kde(self.theta.flatten())
@@ -190,30 +206,36 @@ class RWMH:
         plt.xlabel('Lag')
         plt.ylabel('Autocorrelation')
         plt.axhline(y=0, color='black', linestyle='--')
-        plt.axhline(y=-1.96 / np.sqrt(self.theta.size), color='b', linestyle='--')
-        plt.axhline(y=1.96 / np.sqrt(self.theta.size), color='b', linestyle='--')
         plt.show()
 
-l = LinearData(2, 3, 1)
-l.plot_data()
-r = RWMH(linear_model, np.array([50]), 5, l.m, l.b, l.y)
+l = LinearData(2, 3, 2)
 
-for i in range(20000):
-    if i == 10005:
-        r.sigma = 2
-    if i == 15000:
-        r.sigma = 0.5
-    #     r.burning(2000)
+l.plot_data()
+
+r = RWMH(linear_model, np.array([0]), 2.4, l.m, l.b, l.y, (np.mean(l.y) - l.b)/l.m) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
+
+for i in range(100000):
+    # if i == 3005:
+    #     r.sigma = 70
+    # if i == 6000:
+    #     r.sigma = 40
+    # if i == 9000:
+    #     r.sigma = 20
+    # if i == 13000:
+    #     r.sigma = 10
+    # if i == 15000:
+    #     r.sigma = 5
 
     r.sample()
     r.acceptance_rate()
+
+r.burning(60)
 
 r.plot_samples()
 
 def error_plots(x, x_hat):
     # Calculate absolute error for each iteration
     abs_error = np.abs(x_hat - x)
-
     # Calculate running mean of estimates
     running_mean = np.cumsum(x_hat) / np.arange(1, len(x_hat) + 1)
 
@@ -233,7 +255,6 @@ def error_plots(x, x_hat):
     plt.ylabel('$\\theta$')
     plt.legend()
 
-
     # plt.yscale('log')  # Use log scale for better visualization
     plt.show()
 
@@ -246,3 +267,27 @@ def acceptance_plot(acceptance):
 error_plots(l.x, r.theta)
 acceptance_plot(r.accept_rate)
 r.plot_autocorrelation()
+
+
+
+# def particle_trajectory(particle: NDArray[np.float64]):
+
+
+
+# r2 = RWMH(linear_model, np.array(np.mean(r.theta)), 2.4, l.m, l.b, l.y) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
+#
+# for i in range(8000):
+#     # if i == 10005:
+#     #     r.sigma = l.sigma*2
+#     # if i == 20000:
+#     #     r.sigma = l.sigma
+#     r2.sample()
+#     r2.acceptance_rate()
+#
+# r2.burning(60)
+#
+# r2.plot_samples()
+#
+# error_plots(l.x, r2.theta)
+# acceptance_plot(r2.accept_rate)
+# r2.plot_autocorrelation()
