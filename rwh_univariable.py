@@ -9,24 +9,6 @@ from scipy import stats
 def linear_model(x, m, c):
     return m * x + c
 
-def closest_point_x(point: tuple[float, float], m: float, c: float, ):
-    a, b = point
-
-    # Line perpendicular to the original line
-    m_perpendicular = -1 / m if m != 0 else float('inf')
-
-    # y-intercept of the perpendicular line
-    c_perpendicular = b - m_perpendicular * a
-
-    # Find intersection point
-    if m_perpendicular != float('inf'):
-        x = (c_perpendicular - c) / (m - m_perpendicular)
-        y = m * x + c
-    else:  # Case when original line is horizontal
-        x = a
-        y = m * x + c
-
-    return x, y
 """
 Important changes, adding the prior to the calculations smooths out the distribution and improves the shape of the pdf
 The greater the variance the more the state space is explored and the lower the acceptance rate is.
@@ -49,8 +31,7 @@ class LinearData:
 
     def plot_data(self):
         plt.scatter(self.x, self.y, alpha=0.5)
-        # x, y = closest_point_x(tuple([ self.x, self.y[0] ]), self.m, self.b)
-        plt.scatter((np.mean(l.y) - l.b)/l.m, self.y, label='Closest Point on line')
+        plt.scatter((np.mean(l.y) - l.b)/l.m, self.y, label='Prior: Observation on Model')
         plt.plot(np.linspace(0, 100, 100), linear_model(np.linspace(0, 100, 100), self.m, self.b), 'r-', label='True Line')
         plt.legend()
         plt.show()
@@ -87,7 +68,7 @@ class RWMH:
         :param theta_current:
         :return:
         """
-        log_prior = stats.norm.logpdf(theta_proposed, loc=self.prior_theta, scale=5) - stats.norm.logpdf(theta_current, loc=self.prior_theta, scale=5)
+        log_prior = stats.norm.logpdf(theta_proposed, loc=self.prior_theta, scale=50) - stats.norm.logpdf(theta_current, loc=self.prior_theta, scale=50)
         return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current) + log_prior
 
     def acceptance_rate(self):
@@ -208,23 +189,20 @@ class RWMH:
         plt.axhline(y=0, color='black', linestyle='--')
         plt.show()
 
-l = LinearData(2, 3, 2)
+l = LinearData(2, 3, 5)
 
 l.plot_data()
 
-r = RWMH(linear_model, np.array([0]), 2.4, l.m, l.b, l.y, (np.mean(l.y) - l.b)/l.m) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
+r = RWMH(linear_model, np.array([0]), 40, l.m, l.b, l.y, (np.mean(l.y) - l.b)/l.m) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
 
 for i in range(100000):
-    # if i == 3005:
-    #     r.sigma = 70
-    # if i == 6000:
-    #     r.sigma = 40
-    # if i == 9000:
-    #     r.sigma = 20
-    # if i == 13000:
-    #     r.sigma = 10
-    # if i == 15000:
-    #     r.sigma = 5
+    if i == 5000:
+        r.sigma = 20
+    if i == 10000:
+        r.sigma = 10
+    if i == 15000:
+        r.sigma = 10
+
 
     r.sample()
     r.acceptance_rate()
