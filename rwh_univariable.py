@@ -31,7 +31,7 @@ class LinearData:
 
     def plot_data(self):
         plt.scatter(self.x, self.y, alpha=0.5)
-        plt.scatter((np.mean(l.y) - l.b)/l.m, self.y, label='Prior: Observation on Model')
+        plt.scatter((l.y - l.b)/l.m, self.y, label='Prior: Observation on Model')
         plt.plot(np.linspace(0, 100, 100), linear_model(np.linspace(0, 100, 100), self.m, self.b), 'r-', label='True Line')
         plt.legend()
         plt.show()
@@ -39,7 +39,6 @@ class LinearData:
     def true_cdf(self, x):
         return stats.norm.cdf(x, loc=self.m, scale=self.sigma)
 
-# Poor Mixing
 class RWMH:
     def __init__(self, prop_model: Callable, theta_0: NDArray[np.float64],
                  sigma_0, m: float, b: float, y: NDArray[np.float64],
@@ -79,17 +78,19 @@ class RWMH:
         self.accept_rate = np.append(self.accept_rate, rate)
 
     def scale_beta(self):
-        self.beta *= np.exp( 0.05*(self.accept_rate[-1] - 0.234) )
+        self.beta *= min(np.exp( 0.05*(self.accept_rate[-1] - 0.234) ), 1)
 
     def sample(self):
         """
         Sample from the posterior distribution of the model parameters using the Random Walk Metropolis-Hastings algorithm.
         :return:
         """
-        theta_proposed = np.random.normal(self.theta[-1], self.beta, self.theta[-1].shape)
+        theta_proposed = np.random.normal(self.theta[-1], self.beta, self.theta[0,:].shape)
         alpha = self.proposal_ratio(theta_proposed, self.theta[-1]) # minimum is 0 instead of 1 since log(1) = 0
         uniform = np.log(np.random.random())
-        if uniform < alpha:
+        #print(self.theta[-1,:], theta_proposed)
+        #print("new prob: ", np.vstack([self.theta, theta_proposed]))
+        if uniform < alpha.all():
             self.theta = np.vstack([self.theta, theta_proposed]) # add the proposed theta to the stack
             self.accept_count += 1
         else:
@@ -102,7 +103,7 @@ class RWMH:
 
         :param number: number of samples to remove
         """
-        if number >= self.theta.shape[0]:
+        if number >= len(self.theta[:, 0]):
             raise ValueError("Burning period cannot be longer than or equal to the total number of samples.")
         print("Burning period: ", number)
         print("Theta Before: ", self.theta)
@@ -138,27 +139,30 @@ class RWMH:
         return result[:lag] / result[0]
 
     def plot_samples(self):
-        plt.figure(figsize=(15, 10))
-        plt.subplot(2, 2, 1)
-        plt.plot(np.linspace(1, self.theta.size, self.theta.size), self.theta[:], label='param')
-        plt.plot(l.x, 'ro', label='true param value')
-        plt.legend()
-        plt.title('Parameter Sample Path')
+        param_number = len(self.theta[0, :])
+        sample_number = len(self.theta[:, 0])
+        plt.figure(figsize=(20, 50))
+        for i in range(1, param_number):
+            plt.subplot(param_number, 4, 4*i + 1)
+            plt.plot(np.linspace(1, sample_number, sample_number), self.theta[:, i], label='param')
+            plt.plot(l.x[i], 'ro', label='true param value')
+            #plt.legend()
+            plt.title('Parameter Sample Path')
 
-        plt.subplot(2, 2, 2)
-        plt.hist(self.theta, bins=50)
-        plt.title('Parameter Sample Histogram')
-        x_range = np.linspace(np.min(self.theta), np.max(self.theta), self.theta.size)
+            plt.subplot(param_number, 4, 4*i + 2)
+            plt.hist(self.theta[:, i], bins=50)
+            plt.title('Parameter Sample Histogram')
+            x_range = np.linspace(np.min(self.theta[:, i]), np.max(self.theta[:, i]), sample_number)
 
-        plt.subplot(2, 2, 3)
-        y = [self.empirical_distribution(I) for I in x_range]
-        plt.plot(np.linspace(np.min(self.theta), np.max(self.theta), self.theta.size), y, label='Empirical CDF')
-        plt.plot(l.x, self.empirical_distribution(l.x), 'bo', label='F(True Param Value)')
-        plt.title('Empirical Cumulative Distribution')
-        plt.xlabel('θ')
-        plt.ylabel('F(θ)')
-        plt.legend()
-        plt.subplot(2, 2, 4)
+            plt.subplot(param_number, 4, 4*i + 3)
+            f = [self.empirical_distribution(I) for I in x_range]
+            plt.plot(np.linspace(np.min(self.theta[:, i]), np.max(self.theta[:, i]), sample_number), f, label='Empirical CDF')
+            plt.plot(l.x[i], self.empirical_distribution(l.x), 'bo', label='F(True Param Value)')
+            plt.title('Empirical Cumulative Distribution')
+            plt.xlabel('θ')
+            plt.ylabel('F(θ)')
+            #plt.legend()
+            plt.subplot(param_number, 4, 4*i + 4)
 
        # kde_quarter = stats.gaussian_kde(self.theta[:self.theta.size//4].flatten())
        # plt.plot(x_range, kde_quarter(x_range), label='Sample PDF (KDE) quarter', linestyle='--')
@@ -172,15 +176,12 @@ class RWMH:
        # print("start kde")
        # kde_final = stats.gaussian_kde(self.theta.flatten())
        # plt.plot(x_range, kde_final(x_range), label='Sample PDF (KDE)', linestyle='-', color='b')
-
-        true_pdf = stats.norm.pdf(x_range, loc=l.x, scale=l.sigma)
-        plt.plot(x_range, true_pdf, label='True PDF', linestyle='-', color='r')
-        #print("finish kde")
-
-        plt.title('Sample PDF vs True PDF')
-        plt.xlabel('θ')
-        plt.ylabel('Density')
-        plt.legend()
+            true_pdf = stats.norm.pdf(x_range, loc=l.x[i], scale=l.sigma)
+            plt.plot(x_range, true_pdf, label='True PDF', linestyle='-', color='r')
+            plt.title('Sample PDF vs True PDF')
+            plt.xlabel('θ')
+            plt.ylabel('Density')
+            #plt.legend()
         plt.show()
 
     def plot_autocorrelation(self, lag: int = 50):
@@ -197,28 +198,24 @@ class RWMH:
         plt.axhline(y=0, color='black', linestyle='--')
         plt.show()
 
-l = LinearData(2, 3, 5)
-
-l.plot_data()
-
-r = RWMH(linear_model, np.array([0]), l.sigma, l.m, l.b, l.y, l.x, 25) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
-
-
+# Now we will be estimating 10 data points
 beta_values = []
-for i in range(159000):
+l = LinearData(2, 3, 5, 10) 
+l.plot_data() 
+r = RWMH(linear_model, np.zeros(10), l.sigma, l.m, l.b, l.y, l.x, 0.1) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules beta_values = []
+for i in range(2500):
     #    if i == 5000:
     #            r.beta = 10
     #    if i == 10000:
     #            r.beta = 7
     #    if i == 15000:
-    #            r.beta = 5
 
     r.sample()
     r.acceptance_rate()
-    r.scale_beta()
+    #r.scale_beta()
     beta_values.append(r.beta) #= np.vstack([beta_values, r.beta])
 
-r.burning(100)
+#r.burning(100)
 
 r.plot_samples()
 
@@ -260,7 +257,7 @@ def acceptance_plot(acceptance):
     plt.title("Beta Values")
     plt.show()
 
-error_plots(l.x, r.theta)
+#error_plots(l.x, r.theta)
 acceptance_plot(r.accept_rate)
 r.plot_autocorrelation()
 
