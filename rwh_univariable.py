@@ -43,7 +43,7 @@ class LinearData:
 class RWMH:
     def __init__(self, prop_model: Callable, theta_0: NDArray[np.float64],
                  sigma_0, m: float, b: float, y: NDArray[np.float64],
-                 prior_theta: float):
+                 prior_theta: float, scaling: float):
         self.model = prop_model
         self.theta: NDArray[np.float64] = np.array([theta_0])  # theta in a row array
         self.sigma = sigma_0
@@ -54,10 +54,11 @@ class RWMH:
         self.accept_count = 0
         self.accept_rate = np.array([0])
         self.prior_theta = prior_theta
+        self.beta = scaling
 
     def log_likelihood(self, theta):
         # Takes the Gaussian likelihood of the data and the model given the current theta
-        return np.sum(-1 / 2 * ((self.data - self.model(theta, self.m, self.b)) / self.sigma) ** 2)
+        return np.sum(-1 / 2 * ((self.data - self.model(theta, self.m, self.b)) / self.sigma) ** 2) # Need to add self.beta`
 
     def proposal_ratio(self, theta_proposed, theta_current):
         """
@@ -68,7 +69,8 @@ class RWMH:
         :param theta_current:
         :return:
         """
-        log_prior = stats.norm.logpdf(theta_proposed, loc=self.prior_theta, scale=50) - stats.norm.logpdf(theta_current, loc=self.prior_theta, scale=50)
+        log_prior = stats.norm.logpdf(theta_proposed, loc=self.prior_theta, scale=75) - stats.norm.logpdf(theta_current, loc=self.prior_theta, scale=75)
+
         return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current) + log_prior
 
     def acceptance_rate(self):
@@ -76,12 +78,15 @@ class RWMH:
         rate = self.accept_count/self.theta.size
         self.accept_rate = np.append(self.accept_rate, rate)
 
+    def scale_beta(self):
+        self.beta *= np.exp( 0.05*(self.accept_rate[-1] - 0.234) )
+
     def sample(self):
         """
         Sample from the posterior distribution of the model parameters using the Random Walk Metropolis-Hastings algorithm.
         :return:
         """
-        theta_proposed = np.random.normal(self.theta[-1], self.sigma, self.theta[-1].shape)
+        theta_proposed = np.random.normal(self.theta[-1], self.beta, self.theta[-1].shape)
         alpha = self.proposal_ratio(theta_proposed, self.theta[-1]) # minimum is 0 instead of 1 since log(1) = 0
         uniform = np.log(np.random.random())
         if uniform < alpha:
@@ -122,6 +127,7 @@ class RWMH:
         :return:
         """
 
+
     def autocorrelation(self, lag: int = 50) -> NDArray[np.float64]:
         """
         Calculate autocorrelation.
@@ -154,20 +160,22 @@ class RWMH:
         plt.legend()
         plt.subplot(2, 2, 4)
 
-        kde_quarter = stats.gaussian_kde(self.theta[:self.theta.size//4].flatten())
-        plt.plot(x_range, kde_quarter(x_range), label='Sample PDF (KDE) quarter', linestyle='--')
+       # kde_quarter = stats.gaussian_kde(self.theta[:self.theta.size//4].flatten())
+       # plt.plot(x_range, kde_quarter(x_range), label='Sample PDF (KDE) quarter', linestyle='--')
 
-        kde_half = stats.gaussian_kde(self.theta[:self.theta.size//2].flatten())
-        plt.plot(x_range, kde_half(x_range), label='Sample PDF (KDE) half', linestyle='--')
+       # kde_half = stats.gaussian_kde(self.theta[:self.theta.size//2].flatten())
+       # plt.plot(x_range, kde_half(x_range), label='Sample PDF (KDE) half', linestyle='--')
 
-        kde_qu_th = stats.gaussian_kde(self.theta[:3*self.theta.size//4].flatten(), bw_method='scott')
-        plt.plot(x_range, kde_qu_th(x_range), label='Sample PDF (KDE) third quarter', linestyle='--')
-
-        kde_final = stats.gaussian_kde(self.theta.flatten())
-        plt.plot(x_range, kde_final(x_range), label='Sample PDF (KDE)', linestyle='-', color='b')
+       # kde_qu_th = stats.gaussian_kde(self.theta[:3*self.theta.size//4].flatten(), bw_method='scott')
+       # plt.plot(x_range, kde_qu_th(x_range), label='Sample PDF (KDE) third quarter', linestyle='--')
+        
+       # print("start kde")
+       # kde_final = stats.gaussian_kde(self.theta.flatten())
+       # plt.plot(x_range, kde_final(x_range), label='Sample PDF (KDE)', linestyle='-', color='b')
 
         true_pdf = stats.norm.pdf(x_range, loc=l.x, scale=l.sigma)
         plt.plot(x_range, true_pdf, label='True PDF', linestyle='-', color='r')
+        #print("finish kde")
 
         plt.title('Sample PDF vs True PDF')
         plt.xlabel('θ')
@@ -193,21 +201,24 @@ l = LinearData(2, 3, 5)
 
 l.plot_data()
 
-r = RWMH(linear_model, np.array([0]), 40, l.m, l.b, l.y, (np.mean(l.y) - l.b)/l.m) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
+r = RWMH(linear_model, np.array([0]), l.sigma, l.m, l.b, l.y, l.x, 25) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
 
-for i in range(100000):
-    if i == 5000:
-        r.sigma = 20
-    if i == 10000:
-        r.sigma = 10
-    if i == 15000:
-        r.sigma = 10
 
+beta_values = []
+for i in range(159000):
+    #    if i == 5000:
+    #            r.beta = 10
+    #    if i == 10000:
+    #            r.beta = 7
+    #    if i == 15000:
+    #            r.beta = 5
 
     r.sample()
     r.acceptance_rate()
+    r.scale_beta()
+    beta_values.append(r.beta) #= np.vstack([beta_values, r.beta])
 
-r.burning(60)
+r.burning(100)
 
 r.plot_samples()
 
@@ -237,9 +248,16 @@ def error_plots(x, x_hat):
     plt.show()
 
 def acceptance_plot(acceptance):
+    plt.subplot(1, 2, 1)
     plt.plot(np.linspace(1, acceptance.size, acceptance.size), acceptance, label='value')
+    plt.axhline(0.234, color='r', linestyle='-', label='Optimal Acceptance')
     plt.legend()
     plt.title('acceptance rate')
+    plt.subplot(1, 2, 2)
+    plt.plot(range(0, len(beta_values)), beta_values, label='Scaling Values')
+    plt.axhline(np.mean(beta_values), color='r', linestyle='-', label='Optimal Scaling for 0.234')
+    plt.legend()
+    plt.title("Beta Values")
     plt.show()
 
 error_plots(l.x, r.theta)
