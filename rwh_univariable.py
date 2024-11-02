@@ -39,7 +39,6 @@ class LinearData:
     def true_cdf(self, x):
         return stats.norm.cdf(x, loc=self.m, scale=self.sigma)
 
-# Poor Mixing
 class RWMH:
     def __init__(self, prop_model: Callable, theta_0: NDArray[np.float64],
                  sigma_0, m: float, b: float, y: NDArray[np.float64],
@@ -69,7 +68,8 @@ class RWMH:
         :param theta_current:
         :return:
         """
-        log_prior = stats.norm.logpdf(theta_proposed, loc=self.prior_theta, scale=75) - stats.norm.logpdf(theta_current, loc=self.prior_theta, scale=75)
+        lower = self.prior_theta - 20
+        log_prior = stats.uniform.logpdf(theta_proposed, loc=lower, scale=40) - stats.uniform.logpdf(theta_current, loc=lower, scale=40)
 
         return self.log_likelihood(theta_proposed) - self.log_likelihood(theta_current) + log_prior
 
@@ -79,14 +79,15 @@ class RWMH:
         self.accept_rate = np.append(self.accept_rate, rate)
 
     def scale_beta(self):
-        self.beta *= np.exp( 0.05*(self.accept_rate[-1] - 0.234) )
+        self.beta *= np.exp( 0.02*(self.accept_rate[-1] - 0.234) )
 
     def sample(self):
         """
         Sample from the posterior distribution of the model parameters using the Random Walk Metropolis-Hastings algorithm.
         :return:
         """
-        theta_proposed = np.random.normal(self.theta[-1], self.beta, self.theta[-1].shape)
+        #theta_proposed = np.random.normal(self.theta[-1], self.beta, self.theta[-1].shape)
+        theta_proposed = np.random.uniform(0, 100)
         alpha = self.proposal_ratio(theta_proposed, self.theta[-1]) # minimum is 0 instead of 1 since log(1) = 0
         uniform = np.log(np.random.random())
         if uniform < alpha:
@@ -201,11 +202,11 @@ l = LinearData(2, 3, 5)
 
 l.plot_data()
 
-r = RWMH(linear_model, np.array([0]), l.sigma, l.m, l.b, l.y, l.x, 25) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
+r = RWMH(linear_model, np.array([0]), l.sigma, l.m, l.b, l.y, l.x, (np.mean(l.y) - l.b)/l.m ) # was l.sigma*10 but changed due to Efficient Metropolis Jumping Rules
 
 
 beta_values = []
-for i in range(159000):
+for i in range(45900):
     #    if i == 5000:
     #            r.beta = 10
     #    if i == 10000:
