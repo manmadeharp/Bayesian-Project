@@ -1,91 +1,59 @@
-import scipy as stats
+import scipy as sp
 import numpy as np
 from typing import Tuple, Union
-
-class ContinuousUnivariateDistribution():
-    def __init__(self, pdf, cdf):
-        self.pdf = pdf
-        self.cdf = cdf
-
-    def pdf(self, *args, **kwargs):
-        return self.pdf(*args, **kwargs)
-
-    def cdf(self, *args, **kwargs):
-        return self.cdf(*args, **kwargs)
+from PRNG import RNG, SEED
 
 
-class ContinuousMultivariateDistribution():
-    def __init__(self, pdf, cdf):
-        self.pdf = pdf
-        self.cdf = cdf
-
-    def pdf(self, *args, **kwargs):
-        return self.pdf(*args, **kwargs)
-
-    def cdf(self, *args, **kwargs):
-        return self.cdf(*args, **kwargs)
-
-
-class GaussianDistribution():
-
-    def __init__(self, mean: Union[float, np.ndarray], 
-                 covariance: Union[float, np.ndarray]):
-        """
-        Initialize a Gaussian distribution.
-
-        :param mean: For univariate, a float. For multivariate, a 1D numpy array.
-        :param covariance: For univariate, a float (variance). 
-                           For multivariate, a 2D numpy array (covariance matrix).
-        """
-        self.mean = np.atleast_1d(mean)
-        self.covariance = np.atleast_2d(covariance)
-        
-        if self.mean.shape[0] != self.covariance.shape[0]:
-            raise ValueError("Dimensions of mean and covariance must match.")
-        
-        self.dim = self.mean.shape[0]
-        self.is_univariate = self.dim == 1
-
-    def log_prob(self, x: Union[float, np.ndarray]) -> float:
-        """
-        Returns the .
-
-        :param x: The inputs.
-        :return: The value of the log pdf at the input.
-        """
-        x = np.atleast_1d(x)
-        if x.shape[-1] != self.dim:
-            raise ValueError(f"Input dimension ({x.shape[-1]}) must match distribution dimension ({self.dim}).")
-        
-        if self.is_univariate:
-            return stats.norm.logpdf(x, loc=self.mean[0], scale=np.sqrt(self.covariance[0, 0]))
+class Proposal:
+    def __init__(
+        self, proposal_distribution: sp.stats.rv_continuous, scale: np.ndarray
+    ):
+        self.proposal_distribution = proposal_distribution
+        self.proposal = RNG(SEED, proposal_distribution)
+        if np.isscalar(scale):
+            self.beta = np.sqrt(scale)
         else:
-            return stats.multivariate_normal.logpdf(x, mean=self.mean, cov=self.covariance)
+            self.beta = sp.stats.Covariance.from_cholesky(scale)  # L*x ~ N(0, Sigma)
 
-    def conditional_prob(self, x: Union[float, np.ndarray], 
-                         y: Union[float, np.ndarray]) -> float:
-        x, y = np.atleast_1d(x), np.atleast_1d(y)
-        if x.shape[-1] != self.dim:
-            raise ValueError(f"Input dimension ({x.shape[-1]}) must match distribution dimension ({self.dim}).")
+    def propose(self, current: np.ndarray):
+        return self.proposal(current, self.beta)
 
-        if self.is_univariate:
-            return stats.norm.logpdf(x, loc=y, scale=np.sqrt(self.covariance[0, 0]))
-        else:
-            return stats.multivariate_normal.logpdf(x, mean=y, cov=self.covariance)
+    def proposal_log_density(
+        self,
+        state: np.ndarray,
+        loc: np.ndarray,
+    ) -> np.float64:
+        return self.proposal_distribution.logpdf(state, loc, self.beta)
 
-    def sample(self, size: Union[int, Tuple[int, ...]] = 1) -> np.ndarray:
+
+# Test Proposal
+# test = Proposal(sp.stats.multivariate_normal, np.array([[1, 2], [2, 1]]))
+# print(test.propose(np.array([1.0, 12])))
+# print(test.proposal_log_density(np.array([1.0, 12]), np.array([1.0, 12])))
+
+
+class TargetDistribution:
+    def __init__(
+        self,
+        prior: sp.stats.rv_continuous,
+        likelihood: sp.stats.rv_continuous,
+        data,
+        sigma: float,
+    ):
+        self.prior = prior
+        self.likelihood = likelihood
+        # likelihood
+        self.data = data
+        self.data_sigma = sigma
+
+    def log_likelihood(self, x: np.ndarray) -> np.float64:
         """
-        Generate random samples from the Gaussian distribution.
-
-        :param size: The number of samples to generate. 
-                     Can be an integer or a tuple for multiple dimensions.
-        :return: Random samples from the distribution.
+        Likelihood of our data given the parameters x.
+        I.E the distribution of the data given the parameters x.
+        :param x:
+        :return:
         """
-        if self.is_univariate:
-            return stats.norm.rvs(loc=self.mean[0], scale=np.sqrt(self.covariance[0, 0]), size=size)
-        else:
-            return stats.multivariate_normal.rvs(mean=self.mean, cov=self.covariance, size=size)
+        return np.sum(self.likelihood.logpdf(self.data, x, self.data_sigma))
 
-
-
-
+    def log_prior(self, x: np.ndarray) -> np.float64:
+        return self.prior.logpdf(x)
