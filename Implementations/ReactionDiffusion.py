@@ -18,7 +18,7 @@ class ReactionDiffusionTarget(TargetDistribution):
     def __init__(self, data, x_points, noise_sigma, boundary_conditions):
         # Set up the prior for [r1, r2, D] parameters
         prior = sp.uniform(loc=[0, 0, 0], scale=[5, 5, 1])
-        likelihood = sp.t  # Using t-distribution with 4 degrees of freedom
+        likelihood = sp.t  # Using t-distribution with 6 degrees of freedom
         super().__init__(prior, likelihood, data, noise_sigma)
 
         self.x = x_points
@@ -29,7 +29,7 @@ class ReactionDiffusionTarget(TargetDistribution):
         predicted = self.forward_model(x)
         if np.any(np.isinf(predicted)):
             return np.float64(-np.inf)
-        # Use t-distribution with 4 degrees of freedom
+        # Use t-distribution with 6 degrees of freedom
         return np.float64(
             np.sum(
                 self.likelihood.logpdf(
@@ -48,7 +48,6 @@ class ReactionDiffusionTarget(TargetDistribution):
         return np.float64(np.sum(super().log_prior(x)))
 
     def forward_model(self, params):
-        """Forward model implementation required by parent class"""
         solution = self.solve_steady_state(params)
         if solution is None:
             return np.full_like(self.data, np.inf)
@@ -97,11 +96,10 @@ def generate_synthetic_data(x_points, true_params, noise_sigma, boundary_conditi
     return noisy_data, true_solution
 
 
-
 if __name__ == "__main__":
     # Problem setup
     x_points = np.linspace(0, 1, 100)
-    noise_sigma = 0.1
+    noise_sigma = 0.2
     true_params = np.array([2.0, 1.0, 0.1])  # [r1, r2, D]
     boundary_conditions = (0.2, 0.2)  # Non-zero but moderate boundary conditions
 
@@ -116,13 +114,13 @@ if __name__ == "__main__":
     target = ReactionDiffusionTarget(
         noisy_data, x_points, noise_sigma, boundary_conditions
     )
-    scale = np.diag([0.1, 0.1, 0.01])
+    scale = np.diag([1, 1, 0.5])
     proposal = Proposal(sp.multivariate_normal, scale=scale)
     initial_state = np.array([1.5, 0.8, 0.08])
     mcmc = MetropolisHastings(target, proposal, initial_state)
 
     # Run MCMC
-    n_iterations = 500
+    n_iterations = 5000
     mcmc(n_iterations)
 
     # Debug chain shape
@@ -145,7 +143,6 @@ if __name__ == "__main__":
     ax2.plot(x_points, noisy_data, "k.", alpha=0.5, label="Data")
     ax2.plot(x_points, true_solution, "g-", label="True")
 
-    # Debug final solution
     final_params = active_chain[-1]  # Use last actual sample
     print("\nFinal parameters:", final_params)
     final_solution = target.solve_steady_state(final_params)
@@ -162,10 +159,22 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    # Print results using actual chain values
+    # Print results using chain values
     print("\nResults:")
     print("True parameters:", true_params)
     print("Estimated parameters (mean of last 100 samples):")
     print(np.mean(active_chain[-100:], axis=0))
     print("\nParameter standard deviations:")
     print(np.std(active_chain[-100:], axis=0))
+
+    plt.hist(
+        mcmc.chain[: mcmc._index],
+        bins=30,
+        density=True,
+        histtype="step",
+        label=["r1", "r2", "D"],
+    )
+    plt.title("Parameter Distribution after Sampling")
+    plt.xlabel("Parameter Value")
+    plt.legend()
+    plt.show()
