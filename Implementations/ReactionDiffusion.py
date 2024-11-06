@@ -4,6 +4,7 @@ from scipy.integrate import solve_bvp
 import matplotlib.pyplot as plt
 import os
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from BayesianInference.PRNG import RNG, SEED
@@ -16,18 +17,42 @@ class ReactionDiffusionTarget(TargetDistribution):
 
     def __init__(self, data, x_points, noise_sigma, boundary_conditions):
         # Set up the prior for [r1, r2, D] parameters
-        # Use uniform priors over reasonable ranges for each parameter
         prior = sp.uniform(loc=[0, 0, 0], scale=[5, 5, 1])
-        likelihood = sp.t  # Using t-distribution for robustness
+        likelihood = sp.t  # Using t-distribution with 4 degrees of freedom
         super().__init__(prior, likelihood, data, noise_sigma)
 
         self.x = x_points
         self.bc_a, self.bc_b = boundary_conditions
 
-    def reaction_term(self, u, params):
-        """Cubic reaction term R(u) = r1*u - r2*u^3"""
-        r1, r2, _ = params
-        return r1 * u - r2 * u ** 3
+    def log_likelihood(self, x) -> np.float64:
+        """Override parent log_likelihood to handle solver failures"""
+        predicted = self.forward_model(x)
+        if np.any(np.isinf(predicted)):
+            return np.float64(-np.inf)
+        # Use t-distribution with 4 degrees of freedom
+        return np.float64(
+            np.sum(
+                self.likelihood.logpdf(
+                    self.data - predicted,  # residuals
+                    df=4,  # degrees of freedom
+                    loc=0,  # mean
+                    scale=self.data_sigma,  # scale
+                )
+            )
+        )
+
+    def log_prior(self, x: np.ndarray) -> np.float64:
+        """Log prior probability"""
+        if np.any(x <= 0):  # Parameters must be positive
+            return np.float64(-np.inf)
+        return np.float64(np.sum(super().log_prior(x)))
+
+    def forward_model(self, params):
+        """Forward model implementation required by parent class"""
+        solution = self.solve_steady_state(params)
+        if solution is None:
+            return np.full_like(self.data, np.inf)
+        return solution
 
     def solve_steady_state(self, params):
         """Solve the steady state reaction-diffusion equation"""
@@ -46,100 +71,101 @@ class ReactionDiffusionTarget(TargetDistribution):
 
         try:
             sol = solve_bvp(ode_system, boundary_conditions, self.x, y)
+            if not sol.success:
+                return None
             return sol.sol(self.x)[0]
         except:
             return None
 
-    def forward_model(self, params):
-        """Forward model implementation required by parent class"""
-        solution = self.solve_steady_state(params)
-        if solution is None:
-            # Return something that will make log_likelihood very negative
-            return np.full_like(self.data, np.inf)
-        return solution
-
-    def log_likelihood(self, params):
-        """Override parent log_likelihood to handle solver failures"""
-        predicted = self.forward_model(params)
-        if np.any(np.isinf(predicted)):
-            return -np.inf
-        return super().log_likelihood(predicted)
+    def reaction_term(self, u, params):
+        """Cubic reaction term R(u) = r1*u - r2*u^3"""
+        r1, r2, _ = params
+        return r1 * u - r2 * u**3
 
 
-def generate_synthetic_data(x_points, true_params, noise_sigma):
+def generate_synthetic_data(x_points, true_params, noise_sigma, boundary_conditions):
     """Generate synthetic data for testing"""
-    model = ReactionDiffusionTarget(None, x_points, noise_sigma, (0, 0))
+    model = ReactionDiffusionTarget(None, x_points, noise_sigma, boundary_conditions)
     true_solution = model.solve_steady_state(true_params)
+
+    if true_solution is None:
+        raise ValueError("Failed to solve ODE for true parameters")
 
     # Use the configured PRNG from your library
     noise_rng = RNG(SEED, sp.norm)
-    noisy_data = true_solution + noise_rng(0, noise_sigma, size=len(true_solution))
+    noisy_data = true_solution + noise_rng(0, noise_sigma, len(true_solution))
     return noisy_data, true_solution
 
 
-def main():
+
+if __name__ == "__main__":
     # Problem setup
     x_points = np.linspace(0, 1, 100)
     noise_sigma = 0.1
     true_params = np.array([2.0, 1.0, 0.1])  # [r1, r2, D]
+    boundary_conditions = (0.2, 0.2)  # Non-zero but moderate boundary conditions
 
     # Generate synthetic data
-    noisy_data, true_solution = generate_synthetic_data(x_points, true_params, noise_sigma)
+    noisy_data, true_solution = generate_synthetic_data(
+        x_points, true_params, noise_sigma, boundary_conditions
+    )
+    print("True solution shape:", true_solution.shape)
+    print("True solution range:", np.min(true_solution), np.max(true_solution))
 
-    # Set up target and proposal distributions
-    target = ReactionDiffusionTarget(noisy_data, x_points, noise_sigma, (0, 0))
-
-    # Scale matrix for proposal - important for good mixing
-    scale = np.diag([0.1, 0.1, 0.01])  # Smaller steps for diffusion coefficient
+    # Set up MCMC with same boundary conditions
+    target = ReactionDiffusionTarget(
+        noisy_data, x_points, noise_sigma, boundary_conditions
+    )
+    scale = np.diag([0.1, 0.1, 0.01])
     proposal = Proposal(sp.multivariate_normal, scale=scale)
-
-    # Initial state - start reasonably close to true values
     initial_state = np.array([1.5, 0.8, 0.08])
+    mcmc = MetropolisHastings(target, proposal, initial_state)
 
     # Run MCMC
-    mcmc = MetropolisHastings(target, proposal, initial_state)
-    n_iterations = 10000
+    n_iterations = 500
     mcmc(n_iterations)
 
-    # Plot results
-    plt.figure(figsize=(15, 5))
+    # Debug chain shape
+    print("Chain shape:", mcmc.chain.shape)
+    print("Active chain shape:", mcmc.chain[: mcmc._index].shape)
 
-    # Parameter traces
-    plt.subplot(121)
-    labels = ['r₁', 'r₂', 'D']
-    for i in range(3):
-        plt.plot(mcmc.chain[:, i], label=labels[i])
-    plt.legend()
-    plt.title('Parameter Traces')
-    plt.xlabel('Iteration')
-    plt.ylabel('Parameter Value')
+    # Plot results
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+
+    # Parameter traces with fixed x-axis - only plot actual chain values
+    active_chain = mcmc.chain[: mcmc._index]  # Only use actual samples
+    for i, (param, label) in enumerate(zip(active_chain.T, ["r₁", "r₂", "D"])):
+        ax1.plot(np.arange(len(param)), param, label=label)
+    ax1.set_xlabel("Iteration")
+    ax1.set_ylabel("Parameter Value")
+    ax1.set_title("Parameter Traces")
+    ax1.legend()
 
     # Data and fit comparison
-    plt.subplot(122)
-    plt.plot(x_points, noisy_data, 'k.', alpha=0.5, label='Data')
-    plt.plot(x_points, true_solution, 'g-', label='True')
+    ax2.plot(x_points, noisy_data, "k.", alpha=0.5, label="Data")
+    ax2.plot(x_points, true_solution, "g-", label="True")
 
-    # Use final parameters for fit
-    final_params = mcmc.chain[-1]
+    # Debug final solution
+    final_params = active_chain[-1]  # Use last actual sample
+    print("\nFinal parameters:", final_params)
     final_solution = target.solve_steady_state(final_params)
-    plt.plot(x_points, final_solution, 'r--', label='MCMC Fit')
+    print("Final solution exists:", final_solution is not None)
+    if final_solution is not None:
+        print("Final solution range:", np.min(final_solution), np.max(final_solution))
+        ax2.plot(x_points, final_solution, "r--", label="MCMC Fit")
 
-    plt.legend()
-    plt.title('Data and Model Fit')
-    plt.xlabel('x')
-    plt.ylabel('u(x)')
+    ax2.set_xlabel("x")
+    ax2.set_ylabel("u(x)")
+    ax2.set_title("Data and Model Fit")
+    ax2.legend()
 
     plt.tight_layout()
     plt.show()
 
-    # Print results
+    # Print results using actual chain values
     print("\nResults:")
     print("True parameters:", true_params)
-    print("Estimated parameters (mean of last 1000 samples):")
-    print(np.mean(mcmc.chain[-1000:], axis=0))
+    print("Estimated parameters (mean of last 100 samples):")
+    print(np.mean(active_chain[-100:], axis=0))
     print("\nParameter standard deviations:")
-    print(np.std(mcmc.chain[-1000:], axis=0))
-
-
-if __name__ == "__main__":
-    main()
+    print(np.std(active_chain[-100:], axis=0))
