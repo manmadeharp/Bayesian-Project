@@ -1,7 +1,7 @@
 import scipy as sp
 import numpy as np
 from typing import Tuple, Union
-from PRNG import RNG, SEED
+from .PRNG import RNG, SEED
 
 
 class Proposal:

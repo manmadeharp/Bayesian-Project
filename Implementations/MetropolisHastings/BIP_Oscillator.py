@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
-from PRNG import RNG, SEED
-from Distributions import TargetDistribution, Proposal
-from MetropolisHastings import MetropolisHastings
+from Implementations.BayesianInference import SEED
+from Implementations.BayesianInference import TargetDistribution, Proposal
+from Implementations.BayesianInference.MetropolisHastings import MetropolisHastings
 
 # The static SEED variable for reproducibility
 Seed = 1

@@ -1,8 +1,7 @@
 import numpy as np
 import scipy as sp
-from typing import Callable, Optional
-from MetropolisHastings import MetropolisHastings
-from Distributions import Proposal, TargetDistribution
+from .MetropolisHastings import MetropolisHastings
+from .Distributions import Proposal, TargetDistribution
 
 ## Metropolis Adjusted Langevin Algorithm WIP
 

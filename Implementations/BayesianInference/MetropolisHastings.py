@@ -1,8 +1,7 @@
 import scipy as sp
 import numpy as np
-from numpy.random import Generator, Philox, SeedSequence
-from PRNG import SEED
-from Distributions import Proposal, TargetDistribution
+from .PRNG import SEED
+from .Distributions import Proposal, TargetDistribution
 
 # Default Values
 # - Seed Value
