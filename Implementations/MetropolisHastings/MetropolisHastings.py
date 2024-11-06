@@ -80,6 +80,7 @@ class MetropolisHastings:
             self._index += 1
 
 
+## WIP
 class AdaptiveMetropolisHastings(MetropolisHastings):
     def __init__(
         self,
