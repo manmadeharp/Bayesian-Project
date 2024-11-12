@@ -5,16 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="aa3423b8-248e-413f-b0aa-dfe7283b1e99" name="Changes" comment="Added proper prior that wasn't biasing in a bad way">
-      <change afterPath="$PROJECT_DIR$/Implementations/BayesianInference/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Implementations/ReactionDiffusion.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/MetropolisHastings/BIP_Oscillator.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/MetropolisHastings/BIP_Oscillator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/MetropolisHastings/Distributions.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/BayesianInference/Distributions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/MetropolisHastings/MALA.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/BayesianInference/MALA.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/MetropolisHastings/Metropolis.zip" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/MetropolisHastings/MetropolisHastings.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/BayesianInference/MetropolisHastings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/MetropolisHastings/PRNG.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/BayesianInference/PRNG.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/repomix-output.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Implementations/BayesianInference/Distributions.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/BayesianInference/Distributions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Implementations/ReactionDiffusion.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/ReactionDiffusion.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -96,7 +89,30 @@
       <recent name="C:\Users\finba\PycharmProjects\Bayesian\Implementations\MetropolisHastings\BayesianInference" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.ReactionDiffusion">
+    <configuration name="ReactionDiffusion" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Bayesian" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/Implementations" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Implementations/ReactionDiffusion.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="Python tests for MetropolisHastingsTestStub.TestRNG" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="Bayesian" />
       <option name="ENV_FILES" value="" />
@@ -131,6 +147,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.ReactionDiffusion" />
         <item itemvalue="Python tests.Python tests for MetropolisHastingsTestStub.TestRNG" />
         <item itemvalue="Python tests.Python tests for MetropolisHastingsTestStub.TestRNG.test_rng_generation" />
       </list>
@@ -157,7 +174,7 @@
       <workItem from="1730546975753" duration="21408000" />
       <workItem from="1730860255089" duration="22000" />
       <workItem from="1730860292028" duration="7000" />
-      <workItem from="1730861708522" duration="1904000" />
+      <workItem from="1730861708522" duration="8252000" />
     </task>
     <task id="LOCAL-00001" summary="First Commit">
       <option name="closed" value="true" />
@@ -223,7 +240,15 @@
       <option name="project" value="LOCAL" />
       <updated>1730567783150</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="Added proper prior that wasn't biasing in a bad way">
+      <option name="closed" value="true" />
+      <created>1730882095573</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1730882095573</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -238,7 +263,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/Bayesian$rwh_univariable.coverage" NAME="rwh_univariable Coverage Results" MODIFIED="1729025294328" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/Bayesian$ReactionDiffusion.coverage" NAME="ReactionDiffusion Coverage Results" MODIFIED="1730880864595" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Implementations" />
+    <SUITE FILE_PATH="coverage/Bayesian$ReactionDiffusion.coverage" NAME="ReactionDiffusion Coverage Results" MODIFIED="1731026356970" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Implementations" />
     <SUITE FILE_PATH="coverage/Bayesian$rwh.coverage" NAME="rwh Coverage Results" MODIFIED="1728515668550" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/Bayesian$.coverage" NAME=" Coverage Results" MODIFIED="1730880704301" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Implementations/TestStubs" />
     <SUITE FILE_PATH="coverage/Bayesian$MetropolisHastings.coverage" NAME="MetropolisHastings Coverage Results" MODIFIED="1730567407713" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/Implementations/MetropolisHastings" />

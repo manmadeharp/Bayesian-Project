@@ -120,7 +120,7 @@ if __name__ == "__main__":
     mcmc = MetropolisHastings(target, proposal, initial_state)
 
     # Run MCMC
-    n_iterations = 5000
+    n_iterations = 50000
     mcmc(n_iterations)
 
     # Debug chain shape

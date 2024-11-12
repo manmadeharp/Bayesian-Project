@@ -57,3 +57,54 @@ class TargetDistribution:
 
     def log_prior(self, x: np.ndarray) -> np.float64:
         return self.prior.logpdf(x)
+
+
+class BayesInverseGammaVarianceDistribution(TargetDistribution):
+    """Target distribution with inverse gamma prior on noise variance"""
+
+    def __init__(
+            self,
+            prior: sp.stats.rv_continuous,
+            likelihood: sp.stats.rv_continuous,
+            data,
+            alpha: float = 2.0,  # Shape parameter for inverse gamma
+            beta: float = 1.0,  # Scale parameter for inverse gamma
+    ):
+        # Initialize parent without sigma since we're marginalizing it
+        super().__init__(prior, likelihood, data, sigma=None)
+
+        # Store inverse gamma hyperparameters
+        self.alpha = alpha
+        self.beta = beta
+
+    def log_likelihood(self, x: np.ndarray) -> np.float64:
+        """
+        Compute marginalized log likelihood integrating out σ²
+        p(y|θ) = ∫ p(y|θ,σ²)p(σ²)dσ²
+        """
+        residuals = self.data - x  # Or self.forward_model(x) for complex models
+        n = len(residuals)
+        RSS = np.sum(residuals ** 2)
+
+        # Updated inverse gamma parameters
+        alpha_post = self.alpha + n / 2
+        beta_post = self.beta + RSS / 2
+
+        # Log marginal likelihood (multivariate t-distribution)
+        log_lik = -alpha_post * np.log(beta_post)
+        log_lik += sp.special.gammaln(alpha_post) - sp.special.gammaln(self.alpha)
+        log_lik -= (n / 2) * np.log(2 * np.pi)
+
+        return np.float64(log_lik)
+
+    def sample_variance_posterior(self, x: np.ndarray) -> float:
+        """Sample from conditional posterior of σ² given parameters"""
+        residuals = self.data - x
+        n = len(residuals)
+        RSS = np.sum(residuals ** 2)
+
+        # Posterior inverse gamma parameters
+        alpha_post = self.alpha + n / 2
+        beta_post = self.beta + RSS / 2
+
+        return sp.stats.invgamma.rvs(alpha_post, scale=beta_post)
