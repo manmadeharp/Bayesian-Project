@@ -6,8 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="aa3423b8-248e-413f-b0aa-dfe7283b1e99" name="Changes" comment="Added proper prior that wasn't biasing in a bad way">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/BayesianInference/Distributions.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/BayesianInference/Distributions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Implementations/ReactionDiffusion.py" beforeDir="false" afterPath="$PROJECT_DIR$/Implementations/ReactionDiffusion.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -58,30 +56,30 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python tests.Python tests for MetropolisHastingsTestStub.TestRNG.executor": "Run",
-    "Python tests.Python tests for MetropolisHastingsTestStub.TestRNG.test_rng_generation.executor": "Run",
-    "Python tests.Python tests in MetropolisHastingsTestStub.py.executor": "Run",
-    "Python.MetropolisHastings.executor": "Run",
-    "Python.RW_Metropolis_Hastings.executor": "Run",
-    "Python.RandomWalkMetropolisHastings.executor": "Run",
-    "Python.ReactionDiffusion.executor": "Run",
-    "Python.rwh.executor": "Run",
-    "Python.rwh_univariable.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
-    "ignore.virus.scanning.warn.message": "true",
-    "last_opened_file_path": "C:/Users/finba/PycharmProjects/Bayesian",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python tests.Python tests for MetropolisHastingsTestStub.TestRNG.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests for MetropolisHastingsTestStub.TestRNG.test_rng_generation.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in MetropolisHastingsTestStub.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python.MetropolisHastings.executor&quot;: &quot;Run&quot;,
+    &quot;Python.RW_Metropolis_Hastings.executor&quot;: &quot;Run&quot;,
+    &quot;Python.RandomWalkMetropolisHastings.executor&quot;: &quot;Run&quot;,
+    &quot;Python.ReactionDiffusion.executor&quot;: &quot;Run&quot;,
+    &quot;Python.rwh.executor&quot;: &quot;Run&quot;,
+    &quot;Python.rwh_univariable.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/finba/PycharmProjects/Bayesian&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\finba\PycharmProjects\Bayesian\Implementations\BayesianInference" />
@@ -175,6 +173,7 @@
       <workItem from="1730860255089" duration="22000" />
       <workItem from="1730860292028" duration="7000" />
       <workItem from="1730861708522" duration="8252000" />
+      <workItem from="1731454245770" duration="1297000" />
     </task>
     <task id="LOCAL-00001" summary="First Commit">
       <option name="closed" value="true" />
@@ -248,7 +247,15 @@
       <option name="project" value="LOCAL" />
       <updated>1730882095573</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="Added proper prior that wasn't biasing in a bad way">
+      <option name="closed" value="true" />
+      <created>1731455303283</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1731455303283</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

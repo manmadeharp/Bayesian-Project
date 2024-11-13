@@ -1,7 +1,8 @@
-import scipy as sp
 import numpy as np
-from .PRNG import SEED
+import scipy as sp
+
 from .Distributions import Proposal, TargetDistribution
+from .PRNG import SEED
 
 # Default Values
 # - Seed Value
@@ -50,6 +51,9 @@ class MetropolisHastings:
         ) - self.proposal_distribution.proposal_log_density(
             proposed, current
         )  # Previous given new over new given previous
+        assert np.isscalar(prior_ratio)
+        assert np.isscalar(likelihood_ratio)
+        assert np.isscalar(transition_ratio)
 
         log_ratio = prior_ratio + likelihood_ratio + transition_ratio
         return min(np.float64(0), log_ratio)

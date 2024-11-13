@@ -1,18 +1,20 @@
-import scipy as sp
-import numpy as np
 from typing import Tuple, Union
+
+import numpy as np
+import scipy as sp
+
 from .PRNG import RNG, SEED
 
 
 class Proposal:
-    def __init__(
-        self, proposal_distribution: sp.stats.rv_continuous, scale: np.ndarray
-    ):
+    def __init__(self, proposal_distribution: sp.stats.rv_continuous, scale):
         self.proposal_distribution = proposal_distribution
         self.proposal = RNG(SEED, proposal_distribution)
         if np.isscalar(scale):
+            print("scalar")
             self.beta = np.sqrt(scale)
         else:
+            print("Cholesky")
             self.beta = sp.stats.Covariance.from_cholesky(scale)  # L*x ~ N(0, Sigma)
 
     def propose(self, current: np.ndarray):
@@ -63,12 +65,12 @@ class BayesInverseGammaVarianceDistribution(TargetDistribution):
     """Target distribution with inverse gamma prior on noise variance"""
 
     def __init__(
-            self,
-            prior: sp.stats.rv_continuous,
-            likelihood: sp.stats.rv_continuous,
-            data,
-            alpha: float = 2.0,  # Shape parameter for inverse gamma
-            beta: float = 1.0,  # Scale parameter for inverse gamma
+        self,
+        prior: sp.stats.rv_continuous,
+        likelihood: sp.stats.rv_continuous,
+        data,
+        alpha: float = 2.0,  # Shape parameter for inverse gamma
+        beta: float = 1.0,  # Scale parameter for inverse gamma
     ):
         # Initialize parent without sigma since we're marginalizing it
         super().__init__(prior, likelihood, data, sigma=None)
@@ -84,7 +86,7 @@ class BayesInverseGammaVarianceDistribution(TargetDistribution):
         """
         residuals = self.data - x  # Or self.forward_model(x) for complex models
         n = len(residuals)
-        RSS = np.sum(residuals ** 2)
+        RSS = np.sum(residuals**2)
 
         # Updated inverse gamma parameters
         alpha_post = self.alpha + n / 2
@@ -101,7 +103,7 @@ class BayesInverseGammaVarianceDistribution(TargetDistribution):
         """Sample from conditional posterior of σ² given parameters"""
         residuals = self.data - x
         n = len(residuals)
-        RSS = np.sum(residuals ** 2)
+        RSS = np.sum(residuals**2)
 
         # Posterior inverse gamma parameters
         alpha_post = self.alpha + n / 2
