@@ -114,7 +114,7 @@ if __name__ == "__main__":
     target = ReactionDiffusionTarget(
         noisy_data, x_points, noise_sigma, boundary_conditions
     )
-    scale = np.diag([1, 1, 0.5])
+    scale = np.diag([0.6, 0.6, 0.1])
     proposal = Proposal(sp.multivariate_normal, scale=scale)
     initial_state = np.array([1.5, 0.8, 0.08])
     mcmc = MetropolisHastings(target, proposal, initial_state)
