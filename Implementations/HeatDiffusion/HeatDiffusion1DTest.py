@@ -34,7 +34,7 @@ def test_heat_solver():
 
     # Compute analytical solution
     def analytical_solution(x, t):
-        return np.sin(np.pi * x) * np.exp(-np.pi**2 * t)
+        return np.sin(np.pi * x) * np.exp(-(np.pi**2) * t)
 
     X, T = np.meshgrid(x, solver.t)
     analytical = analytical_solution(X, T)
@@ -60,7 +60,7 @@ def test_heat_solver():
     plt.xlabel("x")
     plt.ylabel("u(x,t)")
     plt.grid(True)
-    plt.savefig("heat_solutions.png")
+    plt.savefig("Assets/heat_solutions.png")
     plt.close()
 
     # Figure 2: Error distribution
@@ -70,7 +70,7 @@ def test_heat_solver():
     plt.xlabel("x")
     plt.ylabel("t")
     plt.title("Error Distribution")
-    plt.savefig("heat_error_dist.png")
+    plt.savefig("Assets/heat_error_dist.png")
     plt.close()
 
     # Figure 3: Error evolution
@@ -82,7 +82,7 @@ def test_heat_solver():
     plt.ylabel("Error")
     plt.title("Error Evolution")
     plt.grid(True)
-    plt.savefig("heat_error_evolution.png")
+    plt.savefig("Assets/heat_error_evolution.png")
     plt.close()
 
     return numerical_solution, analytical, error
