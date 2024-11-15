@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as sp
@@ -125,7 +126,7 @@ class DirichletHeatSolver:
     def analytical_solution(x: np.ndarray, t: np.ndarray) -> np.ndarray:
         """Compute analytical solution u(x,t) = sin(pix)exp(-pi^2t)"""
         X, T = np.meshgrid(x, t)
-        return np.sin(np.pi * X) * np.exp(-np.pi**2 * T)
+        return np.sin(np.pi * X) * np.exp(-(np.pi**2) * T)
 
     def compute_error(
         self, numerical: np.ndarray, analytical: np.ndarray
