@@ -5,6 +5,16 @@ import scipy as sp
 
 from .PRNG import RNG, SEED
 
+## TODO: I need to Add Adaptation MCMC Diagnostics As well.
+#    # Plot 5: Adaptation factor
+#    adapt_factors = []
+#   for i in range(len(chain)):
+#       sampler._index = i
+#       adapt_factors.append(sampler.get_adaptation_weight())
+#   axes[1, 1].plot(adapt_factors)
+#   axes[1, 1].set_xlabel("Iteration")
+#   axes[1, 1].set_ylabel("Adaptation Weight")
+#   axes[1, 1].set_title("Adaptation Weight Decay")
 
 class Proposal:
     def __init__(self, proposal_distribution: sp.stats.rv_continuous, scale):
@@ -14,8 +24,9 @@ class Proposal:
             print("scalar")
             self.beta = np.sqrt(scale)
         else:
-            print("Cholesky")
-            self.beta = sp.stats.Covariance.from_cholesky(scale)  # L*x ~ N(0, Sigma)
+            self.beta = scale
+#            print("Cholesky")
+#            self.beta = sp.stats.Covariance.from_cholesky(scale)  # L*x ~ N(0, Sigma)
 
     def propose(self, current: np.ndarray):
         return self.proposal(current, self.beta)
@@ -58,7 +69,13 @@ class TargetDistribution:
         return np.sum(self.likelihood.logpdf(self.data, x, self.data_sigma))
 
     def log_prior(self, x: np.ndarray) -> np.float64:
-        return self.prior.logpdf(x)
+        if x.ndim == 2 and x.shape[1] == 1:
+            x = x.reshape(-1, 1)
+
+        if not hasattr(self.prior, 'mean'):  # Quick way to check if it's non-frozen
+            return self.prior.logpdf(x[np.newaxis, :])
+
+        return (self.prior.logpdf(x))
 
 
 class BayesInverseGammaVarianceDistribution(TargetDistribution):
@@ -110,3 +127,6 @@ class BayesInverseGammaVarianceDistribution(TargetDistribution):
         beta_post = self.beta + RSS / 2
 
         return sp.stats.invgamma.rvs(alpha_post, scale=beta_post)
+
+
+

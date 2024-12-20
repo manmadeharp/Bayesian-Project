@@ -2,7 +2,7 @@ from numpy.random import SeedSequence, Generator, Philox
 from scipy.stats import rv_continuous
 from typing import Optional
 
-# Static Values
+# Set Global Seed Here
 SEED = 1000
 
 
