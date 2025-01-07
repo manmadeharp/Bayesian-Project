@@ -2,4 +2,4 @@ Written by Finbar Cowan from 2 semester research project on Bayesian Inverse Pro
 
 Work in Progress.
 
-For most up to date and interesting part of the project, please run ReactionDiffusion.py
+For most up to date and interesting part of the project, please run Gaussian_Mixture.py.
