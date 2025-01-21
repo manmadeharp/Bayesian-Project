@@ -1,5 +1,0 @@
-setup.py
-BayesianInference.egg-info/PKG-INFO
-BayesianInference.egg-info/SOURCES.txt
-BayesianInference.egg-info/dependency_links.txt
-BayesianInference.egg-info/top_level.txt
