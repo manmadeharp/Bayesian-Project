@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sp
 from scipy.stats import gaussian_kde
 
-from BayesianInference.MetropolisHastings import MetropolisHastings
+from MetropolisHastings import MetropolisHastings
 
 
 class MCMCDiagnostics:
@@ -151,8 +151,8 @@ class MCMCDiagnostics:
         self._plot_acceptance_rate(axes[1, 0])
         self._plot_ess(axes[1, 1])
         self._plot_marginals(axes[1, 2])
-
         plt.tight_layout()
+        fig.savefig(f"./Plots/MCMC_plot_{type(self.sampler).__name__}")
         if show:
             plt.show()
         return fig, axes

@@ -3,7 +3,7 @@ from typing import Tuple, Union
 import numpy as np
 import scipy as sp
 
-from .PRNG import RNG, SEED
+from PRNG import RNG, SEED
 
 ## TODO: I need to Add Adaptation MCMC Diagnostics As well.
 #    # Plot 5: Adaptation factor

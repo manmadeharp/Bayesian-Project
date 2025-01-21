@@ -1,8 +1,8 @@
 import numpy as np
 import scipy as sp
 
-from .Distributions import Proposal, TargetDistribution
-from .PRNG import SEED
+from Distributions import Proposal, TargetDistribution
+from PRNG import SEED
 
 # Default Values
 # - Seed Value
@@ -302,14 +302,6 @@ class AdaptiveMetropolisHastings(MetropolisHastings):
             self.max_size = new_max
 
         for i in range(n):
-            # print(
-            #    "burnt",
-            #    self.burnt,
-            #    "index",
-            ##    self._index,
-            #    "min samples == _index",
-            #    self._index == self.min_samples_adapt // 2,
-            # )
             if (self._index == self.min_samples_adapt // 2) and not self.burnt:
                 print("Burning")
                 self.burn(self.min_samples_adapt // 2 - 1)
