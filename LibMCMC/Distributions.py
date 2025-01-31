@@ -16,17 +16,19 @@ from PRNG import RNG, SEED
 #   axes[1, 1].set_ylabel("Adaptation Weight")
 #   axes[1, 1].set_title("Adaptation Weight Decay")
 
+
 class Proposal:
     def __init__(self, proposal_distribution: sp.stats.rv_continuous, scale):
         self.proposal_distribution = proposal_distribution
-        self.proposal = RNG(SEED, proposal_distribution)
+        self.proposal = RNG(SEED // 2, proposal_distribution)
         if np.isscalar(scale):
             print("scalar")
             self.beta = np.sqrt(scale)
         else:
             self.beta = scale
-#            print("Cholesky")
-#            self.beta = sp.stats.Covariance.from_cholesky(scale)  # L*x ~ N(0, Sigma)
+
+    #            print("Cholesky")
+    #            self.beta = sp.stats.Covariance.from_cholesky(scale)  # L*x ~ N(0, Sigma)
 
     def propose(self, current: np.ndarray):
         return self.proposal(current, self.beta)
@@ -72,10 +74,10 @@ class TargetDistribution:
         if x.ndim == 2 and x.shape[1] == 1:
             x = x.reshape(-1, 1)
 
-        if not hasattr(self.prior, 'mean'):  # Quick way to check if it's non-frozen
+        if not hasattr(self.prior, "mean"):  # Quick way to check if it's non-frozen
             return self.prior.logpdf(x[np.newaxis, :])
 
-        return (self.prior.logpdf(x))
+        return self.prior.logpdf(x)
 
 
 class BayesInverseGammaVarianceDistribution(TargetDistribution):
@@ -127,6 +129,3 @@ class BayesInverseGammaVarianceDistribution(TargetDistribution):
         beta_post = self.beta + RSS / 2
 
         return sp.stats.invgamma.rvs(alpha_post, scale=beta_post)
-
-
-
