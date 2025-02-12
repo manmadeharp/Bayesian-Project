@@ -5,7 +5,7 @@ import scipy as sp
 import torch
 from scipy.optimize import approx_fprime
 
-from Distributions import TargetDistribution
+from Library.Distributions import TargetDistribution
 
 
 class GradientCalculator:

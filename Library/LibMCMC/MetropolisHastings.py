@@ -1,8 +1,8 @@
 import numpy as np
 import scipy as sp
 
-from Distributions import Proposal, TargetDistribution
-from PRNG import SEED
+from Library.Distributions import Proposal, TargetDistribution
+from Library.PRNG import SEED
 
 
 class MetropolisHastings:

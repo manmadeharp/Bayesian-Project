@@ -5,10 +5,10 @@ from typing import Callable, Dict, Optional
 import numpy as np
 import scipy as sp
 
-from Diagnostics import MCMCDiagnostics
-from Distributions import Proposal, TargetDistribution
-from GradientUtils import get_gradient_function
-from MetropolisHastings import MetropolisHastings
+from Library.Diagnostics import MCMCDiagnostics
+from Library.Distributions import Proposal, TargetDistribution
+from Library.GradientUtils import get_gradient_function
+from Library.MetropolisHastings import MetropolisHastings
 
 
 class MALAProposal(Proposal):

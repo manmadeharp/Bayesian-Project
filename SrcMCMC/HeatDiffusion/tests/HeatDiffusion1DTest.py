@@ -6,7 +6,7 @@ from HeatDiffusion1D import DirichletHeatConfig, DirichletHeatSolver
 def test_heat_solver():
     """
     Test heat equation solver against analytical solution:
-    u(x,t) = sin(πx)exp(-π²t)
+    u(x,t) = sin(pix)exp(-pi^2t)
     """
     # Setup configuration with better stability
     config = DirichletHeatConfig(
