@@ -38,62 +38,56 @@ class KarhunenLoeveExpansion:
         Returns:
             Sample function evaluated at x_grid points
         """
+        # Generate standard normal random variables
         if rng is None:
-            # Use numpy's default RNG if none provided
             phi = np.random.standard_normal(self.n_terms)
         else:
             phi = rng.standard_normal(self.n_terms)
-            
-        # Initialize function values
-        f = np.zeros_like(x_grid, dtype=float)
         
-        # Compute the KL expansion
-        for k in range(1, self.n_terms + 1):
-            # Eigenvalue: (kπ/L)^(-α)
-            lambda_k = (k * np.pi / self.L) ** (-self.alpha)
-            
-            # Eigenfunction: sin(kπx/L)
-            sin_term = np.sin(k * np.pi * x_grid / self.L)
-            
-            # Add contribution to the function
-            f += np.sqrt(lambda_k) * phi[k-1] * sin_term
-            
-        return f
+        # Pre-compute k*pi values for all terms at once
+        k_values = np.arange(1, self.n_terms + 1)
+        k_pi = k_values * np.pi / self.L
         
-    def compute_prior_precision(self, x_grid: np.ndarray) -> np.ndarray:
+        # Compute eigenvalues for all k at once
+        eigenvalues = np.power(k_pi, -self.alpha)
+        
+        # Compute eigenfunctions for all x and all k at once using broadcasting
+        # This creates a matrix of shape (n_terms, len(x_grid))
+        eigenfunctions = np.sin(k_pi[:, None] * x_grid)
+        
+        # Multiply each eigenfunction by its coefficient and sum
+        # We use broadcasting to align dimensions properly
+        scaled_eigenfunctions = np.sqrt(eigenvalues)[:, None] * eigenfunctions * phi[:, None]
+        
+        # Sum along the k-axis (axis 0) to get the final function values
+        return np.sum(scaled_eigenfunctions, axis=0)
+        
+    def compute_prior_precision(self, x_grid):
         """
-        Compute the prior precision matrix for the discretized function
-        
-        This is an approximation of the operator (-Laplacian)^alpha discretized on the grid
-        
-        Args:
-            x_grid: Spatial grid points
-            
-        Returns:
-            Precision matrix (approximation of (-Laplace)^alpha)
+        Compute the precision matrix for the prior using vectorized operations
         """
         n = len(x_grid)
-        dx = x_grid[1] - x_grid[0]
         
-        # For α=2, this is the standard discretized negative Laplacian
-        if self.alpha == 2:
-            # Standard second-difference approximation of -Δ
-            main_diag = np.ones(n) * 2 / (dx ** 2)
-            off_diag = np.ones(n-1) * (-1) / (dx ** 2)
-            return diags([off_diag, main_diag, off_diag], [-1, 0, 1]).toarray()
-        else:
-            # For other α values, approximation through eigendecomposition
-            # This is an approximation and would need refinement for production use
-            P = np.zeros((n, n))
-            for i in range(n):
-                for j in range(n):
-                    P[i, j] = np.sin((i + 1) * np.pi * x_grid[j] / self.L)
-            
-            # Eigenvalues of (-Δ)^α
-            D = np.diag([(k * np.pi / self.L) ** (2 * self.alpha) for k in range(1, n+1)])
-            
-            # Precision matrix approximation: P D P^T
-            return P @ D @ P.T
+        # Vectorized construction of eigenfunctions matrix
+        # Create meshgrid of indices and positions
+        i_indices = np.arange(1, n+1).reshape(-1, 1)  # Column vector of indices 1,...,n
+        x_positions = x_grid.reshape(1, -1)  # Row vector of x positions
+        
+        # Compute all sine values at once
+        argument = (i_indices * np.pi * x_positions) / self.L
+        P = np.sqrt(2/self.L) * np.sin(argument)
+        
+        # Vectorized eigenvalues computation
+        eigenvalues = ((np.arange(1, n+1) * np.pi / self.L)**(-self.alpha))
+        D = np.diag(eigenvalues)
+        
+        # Compute precision matrix
+        precision = P @ D @ P.T
+        
+        # Ensure symmetry
+        precision = (precision + precision.T) / 2
+        
+        return precision
         
 
 class PCNProposal(Proposal):
@@ -171,7 +165,7 @@ class PCN(MetropolisHastings):
             initial_state: Starting point for the chain
             x_grid: Spatial grid points
             domain_length: Length of the domain [0,L]
-            alpha: Regularity parameter for prior N(0, (-Δ)^(-α))
+            alpha: Regularity parameter for prior N(0, (-delta)^(-alpha))
             beta: PCN step size parameter (0 < beta < 1)
             n_terms: Number of terms in truncated K-L expansion
             reference_measure: If True, use the prior as reference measure
@@ -262,7 +256,7 @@ if __name__ == "__main__":
             # Forward model (simple for illustration)
             def solve_heat_equation(initial, t=0.1):
                 # Simple soluiton
-                return initial * np.exp(-(np.pi) * t)
+                return initial * np.exp(-(np.pi**2) * t)
             
             # Generate observations at t=0.1
             self.x_grid = x_grid
