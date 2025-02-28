@@ -8,9 +8,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as sp
-from BayesianInference.Distributions import Proposal, TargetDistribution
-from BayesianInference.MetropolisHastings import MetropolisHastings
-from BayesianInference.PRNG import RNG
+from LibMCMC.Distributions import Proposal, TargetDistribution
+from LibMCMC.MetropolisHastings import MetropolisHastings
+from LibMCMC.PRNG import RNG
 from scipy.sparse import csc_matrix, diags
 from scipy.sparse.linalg import spsolve
 
@@ -62,7 +62,7 @@ class DirichletHeatSolver:
 
         # LHS matrix (implicit part)
         self.A = diags(
-            [off_diag, main_diag, off_diag],
+           [off_diag, main_diag, off_diag],
             [-1, 0, 1],
             shape=(nx - 2, nx - 2),
             format="csc",
