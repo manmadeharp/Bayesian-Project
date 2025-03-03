@@ -57,6 +57,20 @@ class MetropolisHastings:
         #        assert np.isscalar(likelihood_ratio)
         #        assert np.isscalar(transition_ratio)
         #
+
+        
+        # current_log_prior = self.target_distribution.log_prior(current)
+        # current_log_lik = self.target_distribution.log_likelihood(current)
+        # 
+        # proposed_log_prior = self.target_distribution.log_prior(proposed)
+        # proposed_log_lik = self.target_distribution.log_likelihood(proposed)
+        
+        # print(f"\nCurrent state: {current}")
+        # print(f"Proposed state: {proposed}")
+        # print(f"Current log prior: {current_log_prior}, log lik: {current_log_lik}")
+        # print(f"Proposed log prior: {proposed_log_prior}, log lik: {proposed_log_lik}")
+        # print(f"Log ratio: {proposed_log_prior + proposed_log_lik - (current_log_prior + current_log_lik)}")
+
         log_ratio = prior_ratio + likelihood_ratio + transition_ratio
         return min(np.float64(0), log_ratio)
 
@@ -279,7 +293,7 @@ class AdaptiveMetropolisHastings(MetropolisHastings):
             print(self.proposal_distribution.beta)
             return
 
-        scaled_cov = self.empirical_cov
+        scaled_cov = self.adaptation_scale *self.empirical_cov
         scaled_cov += 1e-6 * np.eye(self.empirical_cov.shape[0])
 
         self.proposal_distribution.beta = scaled_cov
@@ -310,6 +324,7 @@ class AdaptiveMetropolisHastings(MetropolisHastings):
                 accepted_state = proposed
                 self.chain[self._index] = proposed
                 self.acceptance_count += 1
+                # print("Accepted Log_alpha: ", log_alpha)
                 # Update empirical estimates only on acceptance
             else:
                 accepted_state = current

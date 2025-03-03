@@ -3,7 +3,7 @@ from typing import Tuple, Union
 import numpy as np
 import scipy as sp
 
-from Library.PRNG import RNG, SEED
+from PRNG import RNG, SEED
 
 ## TODO: I need to Add Adaptation MCMC Diagnostics As well.
 #    # Plot 5: Adaptation factor
@@ -100,8 +100,8 @@ class BayesInverseGammaVarianceDistribution(TargetDistribution):
 
     def log_likelihood(self, x: np.ndarray) -> np.float64:
         """
-        Compute marginalized log likelihood integrating out σ²
-        p(y|θ) = ∫ p(y|θ,σ²)p(σ²)dσ²
+        Compute marginalized log likelihood integrating out sigma^2
+        p(y|theta) = \int p(y|theta,sigma^2)p(sigma^2)dsigma^2
         """
         residuals = self.data - x  # Or self.forward_model(x) for complex models
         n = len(residuals)

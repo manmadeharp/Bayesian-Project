@@ -1,10 +1,10 @@
 import numpy as np
 import scipy as sp
 from typing import List, Optional
-from Library.Distributions import TargetDistribution, Proposal
-from Library.MALA import MALA
-from Library.Diagnostics import MCMCDiagnostics
-from Library.MetropolisHastings import AdaptiveMetropolisHastings, MetropolisHastings
+from LibMCMC.Distributions import TargetDistribution, Proposal
+from LibMCMC.MALA import MALA
+from LibMCMC.Diagnostics import MCMCDiagnostics
+from LibMCMC.MetropolisHastings import AdaptiveMetropolisHastings, MetropolisHastings
 import matplotlib.pyplot as plt
 
 class HeatDiffusionInverse:
@@ -19,7 +19,7 @@ class HeatDiffusionInverse:
         N: int = 10,        # Number of Fourier coefficients
         D: float = 1.0,     # Diffusion coefficient
         l: float = 1.0,     # Length of spatial domain
-        sigma: float = 0.1  # Observation noise standard deviation
+        sigma: float = 1 # Observation noise standard deviation
     ):
         self.x_obs = x_obs
         self.t_obs = t_obs
@@ -34,18 +34,17 @@ class HeatDiffusionInverse:
         
     def _compute_omega_matrix(self) -> np.ndarray:
         """
-        Compute the Omega matrix where Omega[i,j] = sin(ω_j x_i)exp(-D(jπ/l)²t)
+        Compute the Omega matrix where Omega[i,j] = sin(omega_j x_i)exp(-D(jpi/l)^2t)
         """
         M = len(self.x_obs)  # Number of spatial observations
         Omega = np.zeros((M, self.N))
         
-        for i in range(M):
-            for j in range(self.N):
-                n = j + 1  # Since we start from n=1
-                omega_n = n * np.pi / self.l
-                Omega[i,j] = np.sin(omega_n * self.x_obs[i]) * \
-                            np.exp(-self.D * (omega_n**2) * self.t_obs)
-        
+        j_values = np.array(range(1, self.N + 1))
+        pi_over_l = np.pi / self.l
+        omega_n = j_values * pi_over_l
+        sin_part = np.sin(self.x_obs[:, None] * omega_n[None, :])
+        exp_part = np.exp(-self.D * omega_n**2 * self.t_obs)
+        Omega = sin_part * exp_part
         return Omega
 
     def fundamental_solution(self, x: np.ndarray, t: float, g: callable) -> np.ndarray:
@@ -68,11 +67,13 @@ class HeatDiffusionInverse:
         """
         Compute the Fourier series solution with given coefficients
         """
-        u = np.zeros_like(x)
-        for n in range(1, len(A) + 1):
-            omega_n = n * np.pi / self.l
-            u += A[n-1] * np.sin(omega_n * x) * \
-                 np.exp(-self.D * (omega_n**2) * t)
+        n_values = np.array(range(1, len(A) + 1))
+        pi_over_l = np.pi / self.l
+        omega_n = n_values * pi_over_l
+        sin_part = np.sin(x[:, None] * omega_n[None, :])
+        exp_part = np.exp(-self.D * omega_n**2 * t)
+        term_n = A * exp_part
+        u = np.sum(sin_part * term_n, axis=1)
         return u
 
 class HeatDiffusionTarget(TargetDistribution):
@@ -82,17 +83,24 @@ class HeatDiffusionTarget(TargetDistribution):
     def __init__(
         self,
         heat_model: HeatDiffusionInverse,
-        prior_std: float = 1.0
+        prior_std: float = 1
     ):
         # Initialize with standard normal prior and likelihood
+        # Create diagonal covariance matrix with diminishing values
+        variances = (prior_std * np.exp(-1.0 * np.arange(heat_model.N)))**2
+        prior = sp.stats.multivariate_normal(
+            mean=np.zeros(heat_model.N),
+            cov=np.diag(variances)
+        )
         super().__init__(
-            prior=sp.stats.norm(loc=0, scale=prior_std),
+            prior=prior,
             likelihood=sp.stats.norm,
             data=heat_model.y_obs,
             sigma=heat_model.sigma
         )
         self.heat_model = heat_model
-        
+
+        # Create array of decreasing standard deviations
     def log_likelihood(self, A: np.ndarray) -> np.float64:
         """
         Compute log likelihood: log p(y|A) where y are observations
@@ -101,16 +109,19 @@ class HeatDiffusionTarget(TargetDistribution):
         pred = self.heat_model.Omega @ A
         
         # Compute log likelihood using Gaussian noise model
-        log_lik = -0.5 * len(self.data) * np.log(2*np.pi*self.data_sigma**2)
-        log_lik -= 0.5 * np.sum((self.data - pred)**2) / self.data_sigma**2
+        # log_lik = -0.5 * len(self.data) * np.log(2*np.pi*self.data_sigma**2)
+        # log_lik -= 0.5 * np.sum((self.data - pred)**2) / self.data_sigma**2
         
-        return np.float64(log_lik)
+        return sp.stats.norm.logpdf(self.data, loc=pred, scale=self.data_sigma).sum()
         
     def log_prior(self, A: np.ndarray) -> np.float64:
         """
         Compute log prior: sum of log p(A_n) for each coefficient
         """
-        # Independent normal priors for each coefficient
+        if np.any(A < 0) or np.any(A[1:] > A[:-1]):
+            return -np.inf  # Return log(0) for invalid regions
+        
+        # Compute log prior using different std for each coefficient
         return np.sum(self.prior.logpdf(A))
 
 def run_heat_diffusion_mcmc(
@@ -137,26 +148,20 @@ def run_heat_diffusion_mcmc(
     
     prop = Proposal(
         sp.stats.multivariate_normal,
-        np.eye(4)
+        0.004*np.eye(n_fourier)
     )
 
     # Initialize state with zeros
     initial_state = np.zeros(n_fourier)
     
     # Create and run MALA sampler
-    sampler = AdaptiveMetropolisHastings(
-        target= target,
-        proposal = prop,
-        initial_value = initial_state,
-        adaptation_interval = 10,
-        min_samples_adapt = 500,
-        max_samples_adapt = 30000
-    )
+    sampler = MetropolisHastings(target_distribution=target, proposal_distribution=prop, initialstate=initial_state)
     
     sampler(n_samples)
     
     # Compute diagnostics
     diagnostics = MCMCDiagnostics(sampler, true_value=None)
+
     
     return sampler, diagnostics, heat_model
 from typing import Tuple
@@ -272,24 +277,24 @@ def true_initial_temperature(x):
 
 def main():
     # Set random seed for reproducibility
-    np.random.seed(42)
+    # np.random.seed(42)
     
     # Generate spatial points for observations
-    x_obs = np.linspace(0, 1, 50)
-    t_obs = 0.1  # Time at which we observe
+    x_obs = np.linspace(0, 1, 1000)
+    t_obs = 0.001  # Time at which we observe
     
     # Create true initial condition on a fine grid for plotting
-    x_fine = np.linspace(0, 1, 200)
+    x_fine = np.linspace(0, 1, 1000)
     true_initial = true_initial_temperature(x_fine)
     
     # Generate synthetic observations using fundamental solution
-    heat_model = HeatDiffusionInverse(x_obs, t_obs, None, N=20)  # More coefficients for accuracy
+    heat_model = HeatDiffusionInverse(x_obs, t_obs, None, N=40)  # More coefficients for accuracy
     
     # Generate true evolved temperature at observation time
     y_true = heat_model.fundamental_solution(x_obs, t_obs, true_initial_temperature)
     
     # Add noise to create observations
-    noise_level = 0.05
+    noise_level = 0.01
     noise = noise_level * np.random.randn(len(x_obs))
     y_obs = y_true + noise
     
@@ -320,7 +325,7 @@ def main():
         t_obs=t_obs,
         y_obs=y_obs,
         n_samples=100000,
-        n_fourier=20  # Using more coefficients to better approximate initial condition
+        n_fourier=4  # Using more coefficients to better approximate initial condition
     )
     
     # Print MCMC diagnostics
@@ -352,20 +357,21 @@ def main():
     plt.legend()
     plt.show()
 
-if __name__ == "__main__":
+if __name__ == "jimmy":
     main()
 
-if __name__ == "Jimmy":
+if __name__ == "__main__":
     # Set random seed for reproducibility
     np.random.seed(42)
     
     # Generate synthetic data
-    x_obs = np.linspace(0, 1, 50)
-    t_obs = 0.1
-    true_A = np.array([1.0, 0.5, 0.25, 0.125])  # True Fourier coefficients
+    x_obs = np.linspace(0, 1, 3000)
+    t_obs = 0.006
+    true_A = np.array([1.0, 0.4, 0.21, 0.111])  # True Fourier coefficients
     
     # Create synthetic observations
     heat_model = HeatDiffusionInverse(x_obs, t_obs, None, N=len(true_A))
+
     y_true = heat_model.fourier_solution(x_obs, t_obs, true_A)
     
     # Add noise to create observations
@@ -386,7 +392,7 @@ if __name__ == "Jimmy":
     # Run MCMC
     sampler, diagnostics, model = run_heat_diffusion_mcmc(
         x_obs=x_obs, t_obs=t_obs, y_obs=y_obs,
-        n_samples=100000, n_fourier=len(true_A)
+        n_samples=50000, n_fourier=len(true_A)
     )
     
     # Create analysis object
@@ -398,5 +404,11 @@ if __name__ == "Jimmy":
     
     # Print summary
     analysis.print_coefficient_summary()
+
+    diagnostics.print_summary()
+    diagnostics.plot_diagnostics()
     
     plt.show()
+
+
+

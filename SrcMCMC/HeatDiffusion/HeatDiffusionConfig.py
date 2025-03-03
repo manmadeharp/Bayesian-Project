@@ -18,5 +18,5 @@ class HeatCauchyConfig:
     T: float = 1.0  # Final time 
     nx: int = 100   # Number of spatial points
     nt: int = 100   # Number of time points
-    ic: Callable = lambda t: 0  # Initial condition
+    ic: Callable = lambda t: 1  # Initial condition
 
