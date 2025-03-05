@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Tuple
+from typing import Optional, Callable, Tuple, override
 
 import numpy as np
 import scipy as sp
@@ -6,6 +6,7 @@ from scipy.sparse import diags
 
 from Distributions import Proposal, TargetDistribution
 from MetropolisHastings import MetropolisHastings
+from Diagnostics import MCMCDiagnostics
 from PRNG import RNG, SEED
 
 
@@ -49,8 +50,8 @@ class KarhunenLoeveExpansion:
         k_pi = k_values * np.pi / self.L
         
         # Compute eigenvalues for all k at once
-        eigenvalues = np.power(k_pi, -self.alpha)
-        
+        eigenvalues = np.exp(-self.alpha * np.log(k_pi))     
+
         # Compute eigenfunctions for all x and all k at once using broadcasting
         # This creates a matrix of shape (n_terms, len(x_grid))
         eigenfunctions = np.sin(k_pi[:, None] * x_grid)
@@ -78,7 +79,7 @@ class KarhunenLoeveExpansion:
         P = np.sqrt(2/self.L) * np.sin(argument)
         
         # Vectorized eigenvalues computation
-        eigenvalues = ((np.arange(1, n+1) * np.pi / self.L)**(-self.alpha))
+        eigenvalues = ((np.arange(1, n+1) * np.pi / self.L)**(2*self.alpha))
         D = np.diag(eigenvalues)
         
         # Compute precision matrix
@@ -107,16 +108,17 @@ class PCNProposal(Proposal):
             kl_expansion: Karhunen-Loeve expansion for sampling
             x_grid: Spatial grid points
         """
-        super().__init__(sp.stats.norm, 1.0)  # Initialize with dummy scale
+        super().__init__(None, None) 
         self.beta = beta
         self.kl_expansion = kl_expansion
         self.x_grid = x_grid
         
+    @override
     def propose(self, current: np.ndarray) -> np.ndarray:
         """
         Generate proposal using PCN dynamics with Karhunen-Loeve expansion
         
-        x* = sqrt(1-beta^2)*x + beta*w, where w ~ N(0,C) with C = (-Laplacian)^(-α)
+        x* = sqrt(1-beta^2)*x + beta*w, where w sim N(0,C) with C = (-Laplacian)^(-alpha)
         """
         # Use the proposal object from the parent class to generate standard normal random variables
         # That will be fed into the KL expansion
@@ -241,36 +243,31 @@ if __name__ == "__main__":
     
     # Setup grid and create target distribution
     L = 1.0  # Domain length
-    nx = 100  # Number of grid points
+    nx = 200  # Number of grid points
     x_grid = np.linspace(0, L, nx)
     
     # Create a target distribution for function space sampling
     class HeatEquationPrior(TargetDistribution):
-        def __init__(self, x_grid, noise_level=0.05):
+        def __init__(self, x_grid, noise_level=0.01):
             """
             Create a target for the heat equation initial condition
             """
-            # Generate synthetic data
-            true_initial = np.sin(np.pi * x_grid)  # True initial condition
-            
-            # Forward model (simple for illustration)
-            def solve_heat_equation(initial, t=0.1):
-                # Simple soluiton
-                return initial * np.exp(-(np.pi**2) * t)
-            
-            # Generate observations at t=0.1
+            # Store grid information
             self.x_grid = x_grid
-            self.t_obs = 0.1
-            solution = solve_heat_equation(true_initial, self.t_obs)
-            self.data = solution + noise_level * np.random.randn(len(x_grid))
-            
-            # Store noise level as an instance variable
+            self.L = x_grid[-1] - x_grid[0]  # Domain length
+            self.n_terms = 100  # Number of terms in Fourier series
+            self.t_obs = 0.15  # Observation time
             self.noise_level = noise_level
             
+            # Generate synthetic data
+            true_initial = np.sin(np.pi * x_grid)  # True initial condition
+            solution = self.solve_heat_equation(true_initial, self.t_obs)
+            self.data = solution + noise_level * np.random.randn(len(x_grid))
+            
             # Set up KL expansion for the prior
-            self.alpha = 2.0
+            self.alpha = 4
             self.kl = KarhunenLoeveExpansion(
-                domain_length=1.0,
+                domain_length=self.L,
                 alpha=self.alpha
             )
             
@@ -279,11 +276,32 @@ if __name__ == "__main__":
             
             # Compute prior precision matrix
             self.prior_precision = self.kl.compute_prior_precision(x_grid)
+        
+        def solve_heat_equation(self, initial, t):
+            """
+            Fully vectorized heat equation solver using Fourier series
+            """
+            # Generate k values
+            k = np.arange(1, self.n_terms + 1)
             
+            # Calculate basis functions (eigenfunctions)
+            basis = np.sin(k[:, None] * np.pi * self.x_grid / self.L)
+            
+            # Calculate Fourier coefficients
+            coeffs = np.zeros(self.n_terms)
+            for i in range(self.n_terms):
+                coeffs[i] = np.trapezoid(initial * basis[i], self.x_grid)
+            
+            # Apply time evolution and sum
+            time_factor = np.exp(-(k * np.pi / self.L)**2 * t)
+            solution = np.sum(coeffs[:, None] * time_factor[:, None] * basis, axis=0)
+            
+            return solution
+        
         def log_likelihood(self, x: np.ndarray) -> np.float64:
             """Compute log likelihood for heat equation observations"""
-            # Forward model: simple analytic solution
-            predicted = x * np.exp(-(np.pi**2) * self.t_obs)
+            # Forward model: use the same solver as for data generation
+            predicted = self.solve_heat_equation(x, self.t_obs)
             
             # Gaussian likelihood
             residuals = self.data - predicted
@@ -315,11 +333,12 @@ if __name__ == "__main__":
         domain_length=L,
         alpha=4,  # Prior regularity
         beta=0.2,   # PCN step size
-        n_terms=100, # Number of KL terms
+        n_terms=200, # Number of KL terms
     )
     
     # Run sampler
-    sampler(5000)
+    sampler(10000)
+
     
     # Visualize results
     import matplotlib.pyplot as plt
@@ -334,7 +353,7 @@ if __name__ == "__main__":
         plt.plot(x_grid, sampler.chain[sampler._index-i], 'b-', alpha=0.2)
     
     # Plot posterior mean
-    post_mean = np.mean(sampler.chain[max(0, sampler._index-500):sampler._index], axis=0)
+    post_mean = np.mean(sampler.chain[max(0, sampler._index-3000):sampler._index], axis=0)
     plt.plot(x_grid, post_mean, 'r-', linewidth=2, label='Posterior Mean')
     
     # Plot true initial condition
