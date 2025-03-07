@@ -35,7 +35,7 @@ class MALAProposal(Proposal):
     def propose(self, current: np.ndarray) -> np.ndarray:
         """
         Generate proposal using Langevin dynamics:
-        x* = x + (ε/2)∇log(π(x)) + √ε * z, where z ~ N(0,I)
+        x* = x + (e/2)deltalog(pi(x)) + sqrt(e) * z, where z ~ N(0,I)
         """
         grad_log_target = self.gradient_func(current)
         drift = 0.5 * self.epsilon * grad_log_target
@@ -43,13 +43,11 @@ class MALAProposal(Proposal):
         diffusion = np.sqrt(self.epsilon) * self.proposal(0, 1, size=len(current))
         return current + drift + diffusion
 
-    def proposal_log_density(
-        self, proposed: np.ndarray, current: np.ndarray
-    ) -> np.float64:
+    def log_density(self, proposed: np.ndarray, current: np.ndarray) -> np.float64:
         """
         Compute log q(x'|x) for the MALA proposal.
-        This is Gaussian with mean μ(x) = x + (ε/2)∇log(π(x))
-        and variance ε*I
+        This is Gaussian with mean mu(x) = x + (e/2)deltalog(pi(x))
+        and variance e*I
         """
         grad_log_target = self.gradient_func(current)
         mean = current + 0.5 * self.epsilon * grad_log_target
@@ -161,10 +159,10 @@ class AdaptiveMALA(MALA):
     ):
         super().__init__(
             target_distribution,
-            gradient_func,
             initial_state,
             step_size,
             adaptation_interval,
+            # Gradient Method #TODO
         )
 
         self.min_samples_adapt = min_samples_adapt
@@ -230,6 +228,7 @@ class AdaptiveMALA(MALA):
             self._index += 1
 
 
+# Example usage:
 class GaussianTarget(TargetDistribution):
     def __init__(self):
         prior = sp.stats.norm
@@ -240,7 +239,6 @@ class GaussianTarget(TargetDistribution):
         super().__init__(prior, likelihood, data, 1.0)
 
 
-# Example usage:
 if __name__ == "__main__":
     target = GaussianTarget()
     initial_state = np.array([0.0])
