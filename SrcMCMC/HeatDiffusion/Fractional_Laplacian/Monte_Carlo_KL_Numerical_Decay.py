@@ -46,8 +46,8 @@ def karhunen_expansion(x, k_start, k_end, alpha):
 
 
 
-k_values = [100000, 200000, 300000]  # Different k values to explore
-alpha_values = np.linspace(1.4, 1.4, 1)  # 8 different alpha values between 0.1 and 2
+k_values = [10000, 20000, 30000]  # Different k values to explore
+alpha_values = np.linspace(1.4, 8.4, 4)  # 8 different alpha values between 0.1 and 2
 
 x = np.linspace(0, 1, 1000)  # Range for x values (more points for higher resolution)
 
@@ -55,11 +55,11 @@ x = np.linspace(0, 1, 1000)  # Range for x values (more points for higher resolu
 for j, alpha in enumerate(alpha_values):
     plt.figure()  # Create a new figure window for each alpha
     # Plot the Karhunen-Loève expansion for all k values for this alpha
-    y = karhunen_expansion(x, 1, 100000, alpha)
+    y = karhunen_expansion(x, 1, 10000, alpha)
     plt.plot(x, y, label='k=100000')
     for k in range(1, 8):
-        y += karhunen_expansion(x, k*100000, (k+1)*100000, alpha)
-        plt.plot(x, y, label=f'k={k*100000}')
+        y += karhunen_expansion(x, k*10000, (k+1)*10000, alpha)
+        plt.plot(x, y, label=f'k={k*10000}')
     
     # Set title, labels, and grid for the current plot
     plt.title(f'Karhunen-Loève Expansion (α={alpha:.2f})')

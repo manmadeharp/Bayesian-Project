@@ -31,7 +31,7 @@ class KarhunenLoeveExpansion:
     """
 
     def __init__(
-        self, domain_length: float = 1.0, alpha: float = 2.0, n_terms: int = 100
+        self, domain_length: float = 1.0, alpha: float = 4.0, n_terms: int = 500
     ):
         """
         Initialize Karhunen-Loeve expansion for sampling from N(0, (-Laplacian)^(-alpha))
@@ -45,7 +45,25 @@ class KarhunenLoeveExpansion:
         self.alpha = alpha
         self.n_terms = n_terms
 
-    def sample(self, x_grid: np.ndarray, rng=None) -> Callable:
+    def create_function_from_coefficients(self, phi):
+        """Create a KL function with specified coefficients"""
+        k_values = np.arange(1, self.n_terms + 1)
+        k_pi = k_values * np.pi / self.L
+        eigenvalues = np.exp(-self.alpha * np.log(k_pi))
+        sqrt_eigenvalues = np.sqrt(eigenvalues)
+        eigenfunctions = lambda x: np.sin(k_pi[:, None] * x)
+        
+        def kl_sample_function(x):
+            x = np.asarray(x)
+            return np.sum(kl_sample_function.eigenvalues[:, None] * kl_sample_function.phi[:, None] * kl_sample_function.eigenfunction(x), axis=0)
+            
+        kl_sample_function.phi = phi
+        kl_sample_function.eigenvalues = sqrt_eigenvalues
+        kl_sample_function.eigenfunction = eigenfunctions
+        
+        return kl_sample_function
+    
+    def sample(self, x_grid, rng=None):
         """
         Generate a sample function using the Karhunen-Loeve expansion
 
@@ -56,46 +74,15 @@ class KarhunenLoeveExpansion:
         Returns:
             Sample function evaluated at x_grid points
         """
-        # Generate standard normal random variables
+        # Generate random coefficients
         if rng is None:
             phi = np.random.standard_normal(self.n_terms)
         else:
             phi = rng.standard_normal(self.n_terms)
+            
+        # Use the common function creation logic
+        return self.create_function_from_coefficients(phi)
 
-        # Pre-compute k*pi values for all terms at once
-        k_values = np.arange(1, self.n_terms + 1)
-        k_pi = k_values * np.pi / self.L
-
-        # Compute eigenvalues for all k at once
-        eigenvalues = np.exp(-self.alpha * np.log(k_pi))     
-        # eigenvalues = np.power(k_pi, -self.alpha)
-
-        # Compute eigenfunctions for all x and all k at once using broadcasting
-        # This creates a matrix of shape (n_terms, len(x_grid))
-        eigenfunctions = lambda x: np.sin(k_pi[:, None] * x)
-
-        sqrt_eigenvalues = np.sqrt(eigenvalues)
-
-        # Multiply each eigenfunction by its coefficient and sum
-        # We use broadcasting to align dimensions properly
-        # scaled_eigenfunctions = (
-        #     np.sqrt(eigenvalues)[:, None] * eigenfunctions * phi[:, None]
-        # )
-
-        def kl_sample_function(x):
-            """Karhunen Loeve sample function"""
-            x = np.asarray(x)
-            return np.sum(sqrt_eigenvalues[:, None]*phi[:, None]*eigenfunctions(x),
-                          axis=0)
-
-        kl_sample_function.coefficients = phi # Random iid normal samples
-        kl_sample_function.eigenvalues = eigenvalues # eigenvalues of operator derived from eigenfunctions
-        kl_sample_function.eigenfunction = eigenfunctions # eigenfunction of operator
-
-
-
-        # Sum along the k-axis (axis 0) to get the final function values
-        return kl_sample_function
 
     def compute_prior_precision(self, x_grid):
         """
@@ -126,7 +113,43 @@ class KarhunenLoeveExpansion:
         # precision = (precision + precision.T) / 2
 
         return precision
+    def sample_grid(self, x_grid: np.ndarray, rng=None) -> np.ndarray:
+        """
+        Generate a sample function using the Karhunen-Loeve expansion
 
+        Args:
+            x_grid: Spatial grid points where function is evaluated
+            rng: Random number generator (if None, creates a new one)
+
+        Returns:
+            Sample function evaluated at x_grid points
+        """
+        # Generate standard normal random variables
+        if rng is None:
+            phi = np.random.standard_normal(self.n_terms)
+        else:
+            phi = rng.standard_normal(self.n_terms)
+
+        # Pre-compute k*pi values for all terms at once
+        k_values = np.arange(1, self.n_terms + 1)
+        k_pi = k_values * np.pi / self.L
+
+        # Compute eigenvalues for all k at once
+        eigenvalues = np.exp(-self.alpha * np.log(k_pi))     
+        # eigenvalues = np.power(k_pi, -self.alpha)
+
+        # Compute eigenfunctions for all x and all k at once using broadcasting
+        # This creates a matrix of shape (n_terms, len(x_grid))
+        eigenfunctions = np.sin(k_pi[:, None] * x_grid)
+
+        # Multiply each eigenfunction by its coefficient and sum
+        # We use broadcasting to align dimensions properly
+        scaled_eigenfunctions = (
+            np.sqrt(eigenvalues)[:, None] * eigenfunctions * phi[:, None]
+        )
+
+        # Sum along the k-axis (axis 0) to get the final function values
+        return np.sum(scaled_eigenfunctions, axis=0)
 
 class PCNProposal(Proposal):
     """PCN proposal using Karhunen-Loeve expansion for function spaces"""
@@ -151,22 +174,34 @@ class PCNProposal(Proposal):
         self.x_grid = x_grid
         
     @override
-    def propose(self, current: np.ndarray):# -> np.ndarray:
+    def propose(self, current):# -> np.ndarray:
         """
         Generate proposal using PCN dynamics with Karhunen-Loeve expansion
-        x* = sqrt(1-beta^2)*x + beta*w, where w sim N(0,C) with C = (-Laplacian)^(-alpha)
+        
+        Args:
+            current_func: Current function (with coefficients attribute)
+        
+        Returns:
+            New function from PCN dynamics
         """
-        # Use the proposal object from the parent class to generate standard normal random variables
-        # That will be fed into the KL expansion
+        # Get coefficients from current function
+        current_coeffs = current.phi
+        
+        # Generate standard normal random variables for new function
+        if hasattr(self, 'rng'):
+            phi = self.rng.standard_normal(self.kl_expansion.n_terms)
+        else:
+            phi = np.random.standard_normal(self.kl_expansion.n_terms)
+        
+        # PCN dynamics directly on coefficients (more efficient)
+        proposal_coeffs = np.sqrt(1 - self.beta**2) * current_coeffs + self.beta * phi
+        
+        # Create function from new coefficients
+        return self.kl_expansion.create_function_from_coefficients(proposal_coeffs)
 
-        # Generate a sample from the prior N(0,C) using K-L expansion
-        prior_sample = self.kl_expansion.sample(self.x_grid)
-
-        # PCN proposal formula
-        return lambda x: np.sqrt(1 - self.beta**2) * current + self.beta * prior_sample(x)
-
+    @override
     def proposal_log_density(
-        self, proposed: np.ndarray, current: np.ndarray
+        self, proposed, current
     ) -> np.float64:
         """
         Compute log density ratio for the PCN proposal
@@ -176,6 +211,19 @@ class PCNProposal(Proposal):
         """
         return np.float64(0.0)
 
+    def propose_grid(self, current: np.ndarray) -> np.ndarray:
+        """
+        Generate proposal using PCN dynamics with Karhunen-Loeve expansion
+        x* = sqrt(1-beta^2)*x + beta*w, where w sim N(0,C) with C = (-Laplacian)^(-alpha)
+        """
+        # Use the proposal object from the parent class to generate standard normal random variables
+        # That will be fed into the KL expansion
+
+        # Generate a sample from the prior N(0,C) using K-L expansion
+        prior_sample = self.kl_expansion.sample_grid(self.x_grid)
+
+        # PCN proposal formula
+        return np.sqrt(1 - self.beta**2) * current + self.beta * prior_sample
 
 class PCN(MetropolisHastings):
     """
@@ -191,7 +239,7 @@ class PCN(MetropolisHastings):
         initial_state: np.ndarray,
         x_grid: np.ndarray,
         domain_length: float = 1.0,
-        alpha: float = 2.0,
+        alpha: float = 4.0,
         beta: float = 0.1,
         n_terms: int = 100,
     ):
@@ -219,9 +267,42 @@ class PCN(MetropolisHastings):
         # Initialize the base MCMC sampler
         super().__init__(target_distribution, proposal, initial_state)
 
+        self.coeff_chain = np.zeros((self.max_size, n_terms))
+
         # Store PCN-specific attributes
         self.kl_expansion = kl_expansion
         self.x_grid = x_grid
+
+    def get_function(self, index):
+        """Get function from stored coefficients"""
+        phi = self.coeff_chain[index]
+        return self.kl_expansion.create_function_from_coefficients(phi)
+    
+    def get_functions(self, indices):
+        """
+        Reconstruct multiple functions from coefficient chain
+        
+        Args:
+            indices: List of chain indices to reconstruct
+            
+        Returns:
+            List of callable functions
+        """
+        return [self.get_function(idx) for idx in indices]
+    
+    def evaluate_function(self, index, x):
+        """
+        Directly evaluate function at specific points without full reconstruction
+        
+        Args:
+            index: Chain index to evaluate
+            x: Points to evaluate function at
+            
+        Returns:
+            Function values at specified points
+        """
+        func = self.get_function(index)
+        return func(x)
 
     def acceptance_ratio(self, current, proposed):
         """
@@ -238,44 +319,146 @@ class PCN(MetropolisHastings):
         return min(np.float64(0), likelihood_ratio)
 
     def __call__(self, n: int):
-        """Run PCN for n iterations"""
+        # Resize arrays if needed
         if self._index + n > self.max_size:
             new_max = max(self.max_size * 2, self._index + n)
+            # Resize regular chain (for backward compatibility)
             new_chain = np.empty((new_max, self.chain.shape[1]))
             new_chain[: self._index] = self.chain[: self._index]
             self.chain = new_chain
+            
+            # Resize coefficient chain
+            new_coeff_chain = np.zeros((new_max, self.kl_expansion.n_terms))
+            new_coeff_chain[:self._index] = self.coeff_chain[:self._index]
+            self.coeff_chain = new_coeff_chain
+            
+            # Resize acceptance rates
             new_acceptance_rates = np.empty(new_max)
             new_acceptance_rates[: self._index] = self.acceptance_rates[: self._index]
             self.acceptance_rates = new_acceptance_rates
             self.max_size = new_max
 
-        for i in range(n):
+        for i in range(n): # Surely I need to add _index + i to access further values???
             if i == 200 and not self.burnt:
                 self.burn(199)
 
-            current = self.chain[self._index - 1]
+            # Get current function
+            current = self.get_function(self._index - 1)
+            
+            # Generate proposal
             proposed = self.proposal_distribution.propose(current)
-
+            
+            # Evaluate acceptance
             log_alpha = self.acceptance_ratio(current, proposed)
 
             if np.log(self.uniform_rng.uniform()) < log_alpha:
-                self.chain[self._index] = proposed
+                # print(proposed.phi)
+                # Store coefficients
+                self.coeff_chain[self._index] = proposed.phi
+                # Also store function values for compatibility
+                # self.chain[self._index] = proposed(self.x_grid) # this might be the issue
                 self.acceptance_count += 1
             else:
-                self.chain[self._index] = current
+                self.coeff_chain[self._index] = current.phi
+                # self.chain[self._index] = current(self.x_grid)
+
+
 
             self.acceptance_rates[self._index] = self.acceptance_count / self._index
             self._index += 1
 
 
+def test_kl_and_propose():
+    """Test KL expansion and proposal mechanism"""
+    import matplotlib.pyplot as plt
+    
+    # Setup
+    L = 1.0
+    x_grid = np.linspace(0, L, 1000)
+    alpha = 4.0
+    beta = 0.2
+    n_terms = 500
+    
+    # Create a KL expansion object
+    kl = KarhunenLoeveExpansion(domain_length=L, alpha=alpha, n_terms=n_terms)
+    
+    # Create a known function
+    true_func = lambda x: np.sin(np.pi * x / L)
+    
+    # Sample from KL
+    samples = []
+    for i in range(100):
+        sample_func = kl.sample(x_grid)
+        samples.append(sample_func)
+
+    # Sample from KL
+    samples2 = []
+    for i in range(100):
+        sample_func = kl.sample_grid(x_grid)
+        samples2.append(sample_func)
+    
+    # Create proposal object
+    proposal = PCNProposal(beta=beta, kl_expansion=kl, x_grid=x_grid)
+    
+    # Test proposals
+    proposals = []
+    current = kl.create_function_from_coefficients(np.zeros(n_terms))  # Start with zero
+    for i in range(5):
+        proposed = proposal.propose(current)
+        proposals.append(proposed)
+        current = proposed
+    proposals2 = []
+    current = samples2[1]
+    for i in range(5):
+        proposed = proposal.propose_grid(current)
+        proposals2.append(proposed)
+        current = proposed
+    
+    # Plot everything
+    plt.figure(figsize=(12, 8))
+    
+    # Plot true function
+    plt.plot(x_grid, true_func(x_grid), 'r-', label='True Function')
+    
+    # Plot KL samples
+    for i, sample in enumerate(samples):
+        plt.plot(x_grid, sample(x_grid), 'b-', alpha=0.3, label=f'KL Sample {i+1}' if i==0 else None)
+    
+
+    # Plot proposals
+    for i, prop in enumerate(proposals):
+        plt.plot(x_grid, prop(x_grid), 'g-', alpha=0.3, label=f'Proposal {i+1}' if i==0 else None)
+
+    plt.legend()
+    plt.title('KL Samples and PCN Proposals')
+    plt.grid(True)
+    plt.show()
+
+    plt.plot(x_grid, true_func(x_grid), 'r-', label='True Function')
+    for i, sample in enumerate(samples2):
+        plt.plot(x_grid, sample, 'o-', alpha=0.3, label=f'KL Sample {i+1}' if i==0 else None)
+    for i, prop in enumerate(proposals2):
+        plt.plot(x_grid, prop, 'g-', alpha=0.3, label=f'Proposal {i+1}' if i==0 else None)
+    
+    plt.legend()
+    plt.title('KL Samples and PCN Proposals')
+    plt.grid(True)
+    plt.show()
+    
+    return samples, proposals
+
+# Add this to your main script
 if __name__ == "__main__":
+    # Run test before main MCMC
+    samples, proposals = test_kl_and_propose()
+    # Rest of your code...
     # Example: Heat diffusion inverse problem with PCN
 
     # Setup grid and create target distribution
     L = 1.0  # Domain length
-    nx = 500  # Number of grid points (also number of datapoints right now which needs to change)
+    nx = 1000  # Number of grid points (also number of datapoints right now which needs to change)
     x_grid = np.linspace(0, L, nx)
-    t_grid = sp.stats.uniform(0, 0.1, nx)
+    t_grid = np.full(nx, 0.01)#sp.stats.uniform(loc=0, scale=0.001).rvs(size=nx)
     obs = (x_grid, t_grid)
 
     # Create a target distribution for function space sampling
@@ -298,11 +481,10 @@ if __name__ == "__main__":
             # self.full_grid = np.sort(np.unique(np.concatenate([x_grid, self.x_obs])))
             
             # Generate synthetic data
-            data_index = np.linspace(0, self.L, 100)
             # self.true_initial = 0.8*np.sin(3*np.pi*x_grid) + 0.4*np.sin(np.pi * x_grid)  # True initial condition
-            self.true_initial = lambda x: 4*np.sin(np.pi * x)  # True initial condition
-            solution = self.solve_heat_equation(self.true_initial, self.x_obs, self.t_obs)
-            self.data = solution + noise_level * np.random.randn(len(self.x_obs))
+            self.true_initial = lambda x: np.sin(np.pi * x)  # True initial condition
+            solution = self._solve_heat_equation_impl(self.true_initial, self.x_obs, self.t_obs)
+            self.data = solution + self.noise_level * np.random.randn(len(self.x_obs))
             
             # Set up KL expansion for the prior
             self.alpha = 4
@@ -314,32 +496,42 @@ if __name__ == "__main__":
             super().__init__(None, None, self.data, noise_level)
 
             # Compute prior precision matrix
-            self.prior_precision = self.kl.compute_prior_precision(x_grid)
+            self.prior_precision = self.kl.compute_prior_precision(self.x_obs)
 
+        def solve_heat_equation(self, initial_func, x, t):
+            """Heat equation solver with simple caching"""
+            # Create a unique key for this calculation
+            if hasattr(initial_func, 'phi'):
+                # For KL functions, use their identity
+                cache_key = id(initial_func)
+                
+                # Check if we already solved for this function and grid combo
+                if cache_key in self._array_cache:
+                    return self._array_cache[cache_key]
+                
+                # Solve heat equation
+                solution = self._solve_heat_equation_impl(initial_func, x, t)
+                
+                # Cache the result
+                self._array_cache[cache_key] = solution
+                
+                return solution
+            else:
+                # For non-KL functions, just solve directly
+                return self._solve_heat_equation_impl(initial_func, x, t)
 
-
-        # def solution_vector(self, initial):
-
-        
-        def solve_heat_equation(self, initial, x, t):
-            """Main entry point - redirects to cached implementation"""
-            # Get bytes representation of array for hash key
-            initial_bytes = _make_hashable(initial)
-            
-            # Store the original array for later reference
-            self._array_cache[initial_bytes] = initial
-            
-            # Call the cached implementation with the hashable key
-            return self._solve_heat_equation_cached(initial_bytes, x, t)
-    
         @functools.lru_cache(maxsize=1000)
-        def _solve_heat_equation_cached(self, initial_bytes, x, t):
-            """Cached wrapper - retrieves original array and calls implementation"""
-            # Get the original array back from our storage
-            initial = self._array_cache[initial_bytes]
+        def _solve_heat_equation_cached(self, coeffs_tuple, x_tuple, t):
+            """Cached version of heat equation solver"""
+            # Convert back to numpy arrays
+            coeffs = np.array(coeffs_tuple)
+            x = np.array(x_tuple)
             
-            # Call the actual implementation
-            return self._solve_heat_equation_impl(initial, x, t)
+            # Recreate the function
+            initial_func = self.kl.create_function_from_coefficients(coeffs)
+            
+            # Call the implementation
+            return self._solve_heat_equation_impl(initial_func, x, t)
         def _solve_heat_equation_impl(self, initial, x, t): 
             """
             Fully vectorized heat equation solver using Fourier series for true solutions
@@ -368,25 +560,27 @@ if __name__ == "__main__":
         def log_likelihood(self, x) -> np.float64:
             """Compute log likelihood for heat equation observations"""
             # Forward model: use the same solver as for data generation
-            predicted = self.solve_heat_equation(x, self.x_obs, self.t_obs)
+            predicted = self._solve_heat_equation_impl(x, self.x_obs, self.t_obs)
             
             # Gaussian likelihood
             residuals = self.data - predicted
+            # print("residuals: ", residuals)
             noise_var = self.noise_level**2
             log_lik = -0.5 * np.sum(residuals**2) / noise_var
             log_lik -= 0.5 * len(self.data) * np.log(2 * np.pi * noise_var)
 
             return np.float64(log_lik)
 
-        def log_prior(self, x: np.ndarray) -> np.float64:
-            """Compute log prior density using KL prior structure"""
-            # Quadratic form for zero-mean Gaussian prior
-            log_prior = -0.5 * x @ self.prior_precision @ x
-
-            # Normalization constant (up to constant)
-            log_prior -= 0.5 * len(x) * np.log(2 * np.pi)
-
-            return np.float64(log_prior)
+        def log_prior(self, func):
+            """Compute log prior density for KL functions"""
+            # if hasattr(func, 'coefficients'):
+            #     # For KL functions, use coefficients directly (more efficient)
+            #     phi = func.phi
+            #     return -0.5 * np.sum(phi**2) - 0.5 * len(phi) * np.log(2 * np.pi)
+            # else:
+                # Fallback - evaluate function and use precision matrix
+            func_values = func(self.x_obs)
+            return -0.5 * func_values @ self.prior_precision @ func_values - 0.5 * len(func_values) * np.log(2 * np.pi)
 
     # Create target and initial state
     target = HeatEquationPrior(x_grid, obs)
@@ -404,7 +598,7 @@ if __name__ == "__main__":
     )
 
     # Run sampler
-    sampler(10000)
+    sampler(1000)
 
     # Visualize results
     import matplotlib.pyplot as plt
@@ -417,21 +611,31 @@ if __name__ == "__main__":
     )
 
     # Plot some posterior samples
-    for i in range(min(10, sampler._index - 800), min(50, sampler._index - 600), 10):
-        plt.plot(x_grid, sampler.chain[sampler._index - i], "b-", alpha=0.6)
-
+    # for i in range(min(10, sampler._index - 800), min(50, sampler._index - 600), 10):
+    #     plt.plot(x_grid, sampler.chain[sampler._index - i], "o-", alpha=0.6)
+    #
     # Plot posterior mean
-    # post_mean = np.mean(sampler.chain[max(0, sampler._index-3000):(sampler._index - 1000)], axis=0)
+    # values = []
+    # for i in range(8000, 10000-1):
+    #     value = sampler.get_function(i)(x_grid)
+    #     values.append(value)
+    # post_mean = np.mean(values, axis=0)
     # plt.plot(x_grid, post_mean, 'r-', linewidth=2, label='Posterior Mean')
 
     # Plot true initial condition
+    # Plot true initial condition
     plt.plot(
-        x_grid,
-        target.true_initial,
-        "g--",
-        linewidth=2,
-        label="True Initial Condition",
+        x_grid, 
+        target.true_initial(x_grid),  # Evaluate function
+        "g--", 
+        linewidth=2, 
+        label="True Initial Condition"
     )
+
+    # Plot posterior samples
+    for i in range(min(10, sampler._index - 800), min(50, sampler._index - 600), 10):
+        sample_func = sampler.get_function(sampler._index - i)
+        plt.plot(x_grid, sample_func(x_grid), "b-", alpha=0.6)
 
     plt.xlabel("x")
     plt.ylabel("Function Value")
