@@ -4,6 +4,10 @@ import numpy as np
 import scipy as sp
 from scipy.sparse import diags
 
+from pCN_Analysis import (compute_posterior_predictive, 
+                                            posterior_predictive_analysis,
+                                            functional_pca_analysis)
+import tqdm
 from Distributions import Proposal, TargetDistribution
 from MetropolisHastings import MetropolisHastings
 from Diagnostics import MCMCDiagnostics
@@ -847,4 +851,67 @@ if __name__ == "__main__":
     plt.title("PCN MCMC for Heat Equation Initial Condition")
     plt.legend()
     plt.tight_layout()
+    # plt.show()
+    # After running your MCMC sampler:
+
+    # Run posterior predictive analysis
+    posterior_predictive_analysis(
+        sampler=sampler,
+        target_distribution=target,
+        domain_length=L,
+        prediction_times=[0.01, 0.05, 0.1, 0.2],
+        n_samples=500,
+        burn_in=2000
+    )
+
+    # Run FPCA analysis
+    eigenvalues, eigenfunctions, scores = functional_pca_analysis(
+        sampler=sampler,
+        target_distribution=target,
+        n_components=5,
+        n_samples=1000,
+        burn_in=2000,
+        domain_length=L
+    )
+    # Simple function to evaluate posterior predictive at a specific time
+    def evaluate_posterior_predictive(sampler, target, time_point=0.1, n_samples=100):
+        """Evaluate posterior predictive at a specified time"""
+        # Prediction grid
+        x_pred = np.linspace(0, target.L, 200)
+        t_pred = np.full(len(x_pred), time_point)
+        
+        # Get samples
+        burn_in = 5000
+        indices = np.linspace(burn_in, sampler._index - 1, n_samples, dtype=int)
+        
+        # Collect predictions
+        predictions = []
+        for idx in tqdm.tqdm(indices):
+            func = sampler.get_function(idx)
+            pred = target._solve_heat_equation_impl(func, x_pred, t_pred)
+            predictions.append(pred)
+        
+        # Statistics
+        predictions = np.array(predictions)
+        mean = np.mean(predictions, axis=0)
+        lower = np.percentile(predictions, 2.5, axis=0)
+        upper = np.percentile(predictions, 97.5, axis=0)
+        
+        # Plot
+        plt.figure(figsize=(10, 6))
+        plt.fill_between(x_pred, lower, upper, color='lightblue', alpha=0.5, label='95% CI')
+        plt.plot(x_pred, mean, 'b-', linewidth=2, label='Posterior Mean')
+        plt.plot(x_pred, target.true_initial(x_pred), 'g--', linewidth=2, label='True Initial')
+        
+        # Plot observations if they're at this time
+        plt.title(f'Posterior Predictive at t = {time_point}')
+        plt.xlabel('x')
+        plt.ylabel('Temperature')
+        plt.legend()
+        plt.show()
+        
+        return mean, lower, upper
+
+    # Call with your existing objects
+    evaluate_posterior_predictive(sampler, target)
     plt.show()
