@@ -1,9 +1,13 @@
 from typing import Tuple, Union
+from abc import ABCMeta, abstractmethod
+from typing import Optional
+import numpy as np
+from numpy.random import Generator
 
 import numpy as np
 import scipy as sp
 
-from PRNG import RNG, SEED
+from .PRNG import RNG, SEED
 
 ## TODO: I need to Add Adaptation MCMC Diagnostics As well.
 #    # Plot 5: Adaptation factor
@@ -16,11 +20,41 @@ from PRNG import RNG, SEED
 #   axes[1, 1].set_ylabel("Adaptation Weight")
 #   axes[1, 1].set_title("Adaptation Weight Decay")
 
+class Proposal(metaclass=ABCMeta):
+    """Abstract base class for MCMC proposal distributions."""
+    
+    @abstractmethod
+    def propose(self, current: np.ndarray) -> np.ndarray:
+        """
+        Generate a proposed state.
 
-class Proposal:
+        Args:
+            current: Current state.
+
+        Returns:
+            Proposed state.
+        """
+        pass
+    
+    @abstractmethod
+    def proposal_log_density(self, proposed: np.ndarray, current: np.ndarray) -> np.float64:
+        """
+        Compute the log density of the proposal.
+
+        Args:
+            proposed: Proposed state.
+            current: Current state.
+
+        Returns:
+            Log density of p(proposed | current).
+        """
+        pass
+
+class VectorSpaceProposal(Proposal):
     def __init__(self, proposal_distribution: sp.stats.rv_continuous, scale):
         self.proposal_distribution = proposal_distribution
         self.proposal = RNG(SEED // 2, proposal_distribution)
+        self.beta
         if np.isscalar(scale):
             print("scalar")
             self.beta = np.sqrt(scale)

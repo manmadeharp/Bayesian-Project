@@ -1,16 +1,17 @@
 import numpy as np
 import scipy as sp
-
-from Distributions import Proposal, TargetDistribution
-from PRNG import SEED
+from typing import Optional
+from .Distributions import Proposal, TargetDistribution, VectorSpaceProposal
+from .PRNG import SEED
+# from PRNG import SEED
 
 
 class MetropolisHastings:
     def __init__(
         self,
-        target_distribution: TargetDistribution,
-        proposal_distribution: Proposal,
-        initialstate,
+        target_distribution: Optional[TargetDistribution],
+        proposal_distribution: Optional[Proposal],
+        initialstate = [],
     ):
         """
         Initialize the Metropolis-Hastings algorithm.
@@ -153,7 +154,7 @@ class AdaptiveMetropolisHastingsVOne(MetropolisHastings):
     def __init__(
         self,
         target: TargetDistribution,
-        proposal: Proposal,
+        proposal: VectorSpaceProposal,
         initial_value: np.ndarray,
         adaptation_interval: int = 50,
         min_samples_adapt: int = 500,
@@ -161,6 +162,7 @@ class AdaptiveMetropolisHastingsVOne(MetropolisHastings):
     ):
         # Use parent class initialization
         super().__init__(target, proposal, initial_value)
+        self.proposal_distribution: VectorSpaceProposal = proposal
 
         # Add only what's needed for adaptation
         self.adaptation_interval = adaptation_interval
@@ -229,7 +231,7 @@ class AdaptiveMetropolisHastings(MetropolisHastings):
     def __init__(
         self,
         target: TargetDistribution,
-        proposal: Proposal,
+        proposal: VectorSpaceProposal,
         initial_value: np.ndarray,
         adaptation_interval: int = 1,  # Changed to 1 based on Haario et al.
         target_acceptance: float = 0.234,  # Roberts & Rosenthal optimal

@@ -47,73 +47,79 @@
 #           f"({'≥ -3' if theoretical_slope >= -3 else '< -3'})")
 #
 # plt.show()
-import numpy as np
-import matplotlib.pyplot as plt
-
-def generate_sample(x, K, alpha, rng):
-    """Generate sample from N(0, (-Δ)^(-α))"""
-    phi_k = rng.standard_normal(K)  # K random N(0,1) coefficients
-    sample = np.zeros_like(x)
-    for k in range(1, K+1):
-        sample += (k*np.pi)**(-alpha/2) * np.sin(k*np.pi*x) * phi_k[k-1]
-    return sample
-
-def spectral_derivative(u, order=2):
-    """Compute spectral derivative"""
-    N = len(u)
-    k = np.fft.fftfreq(N) * N
-    u_hat = np.fft.fft(u)
-    return np.fft.ifft((1j*k)**order * u_hat).real
-
-# Test parameters
-alpha_values = [2.0, 3.0, 4.0]
-N_values = np.arange(32, 256, 32)
-num_samples = 100  # Number of samples per α
-K = 1000  # Number of terms in sum
-
-rng = np.random.default_rng(42)
-errors = {alpha: [] for alpha in alpha_values}
-
-for alpha in alpha_values:
-    alpha_errors = []
-    for N in N_values:
-        x = np.linspace(0, 1, N, endpoint=False)
-        sample_errors = []
-        
-        for _ in range(num_samples):
-            # Generate sample
-            u = generate_sample(x, K, alpha, rng)
-            
-            # Compute 2nd derivative
-            u_dd_spectral = spectral_derivative(u, order=2)
-            
-            # Compute "true" derivative with finer grid
-            N_fine = 2*N
-            x_fine = np.linspace(0, 1, N_fine, endpoint=False)
-            u_fine = generate_sample(x_fine, K, alpha, rng)
-            u_dd_true = spectral_derivative(u_fine, order=2)
-            u_dd_true = u_dd_true[::2]  # Downsample to match N
-            
-            # Compute error
-            error = np.max(np.abs(u_dd_spectral - u_dd_true))
-            sample_errors.append(error)
-            
-        alpha_errors.append(np.mean(sample_errors))
-    errors[alpha] = alpha_errors
-
-# Plot results
-plt.figure(figsize=(10, 6))
-for alpha in alpha_values:
-    plt.loglog(N_values, errors[alpha], 'o-', label=f'α={alpha}')
-
-# Add reference slopes
-for p in [1, 2, 3]:
-    ref = N_values[0]**(-p) * (N_values[0]/N_values)**p
-    plt.loglog(N_values, ref, '--', label=f'N^{-p}')
-
-plt.grid(True)
-plt.xlabel('N')
-plt.ylabel('Error')
-plt.title('Spectral Differentiation Error vs Grid Size')
-plt.legend()
-plt.show()
+# import numpy as np
+# import matplotlib.pyplot as plt
+#
+# def generate_sample(x, K, alpha, rng):
+#     """
+#     Parameters:
+#     - x: Array of spatial points.
+#     - K: Number of terms in the expansion.
+#     - alpha: Exponent of the covariance operator.
+#     - phi_k: Array of K standard normal coefficients (N(0,1)).    
+#     """
+#     phi_k = rng.standard_normal(K)  # K random N(0,1) coefficients
+#     sample = np.zeros_like(x)
+#     for k in range(1, K+1):
+#         sample += (k*np.pi)**(-alpha/2) * np.sin(k*np.pi*x) * phi_k[k-1]
+#     return sample
+#
+# def spectral_derivative(u, order=2):
+#     """Compute spectral derivative"""
+#     N = len(u)
+#     k = np.fft.fftfreq(N) * N
+#     u_hat = np.fft.fft(u)
+#     return np.fft.ifft((1j*k)**order * u_hat).real # 1j is the imaginary unit
+#
+# # Test parameters
+# alpha_values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] # Lots of alpha values takes a long time to compute
+# N_values = np.arange(32, 256, 32)
+# num_samples = 100  # Number of samples per alpha
+# K = 100000  # Number of terms in sum
+#
+# rng = np.random.default_rng(42)
+# errors = {alpha: [] for alpha in alpha_values}
+#
+# for alpha in alpha_values:
+#     alpha_errors = []
+#     for N in N_values:
+#         x = np.linspace(0, 1, N, endpoint=False)
+#         sample_errors = []
+#         
+#         for _ in range(num_samples):
+#             # Generate sample
+#             u = generate_sample(x, K, alpha, rng)
+#             
+#             # Compute 2nd derivative
+#             u_dd_spectral = spectral_derivative(u, order=2)
+#             
+#             # Compute "true" derivative with finer grid
+#             N_fine = 2*N
+#             x_fine = np.linspace(0, 1, N_fine, endpoint=False)
+#             u_fine = generate_sample(x_fine, K, alpha, rng)
+#             u_dd_true = spectral_derivative(u_fine, order=2)
+#             u_dd_true = u_dd_true[::2]  # Downsample to match N
+#             
+#             # Compute error
+#             error = np.max(np.abs(u_dd_spectral - u_dd_true))
+#             sample_errors.append(error)
+#             
+#         alpha_errors.append(np.mean(sample_errors))
+#     errors[alpha] = alpha_errors
+#
+# # Plot results
+# plt.figure(figsize=(10, 6))
+# for alpha in alpha_values:
+#     plt.loglog(N_values, errors[alpha], 'o-', label=f'α={alpha}')
+#
+# # Add reference slopes
+# for p in [1, 2, 3]:
+#     ref = N_values[0]**(-p) * (N_values[0]/N_values)**p
+#     plt.loglog(N_values, ref, '--', label=f'N^{-p}')
+#
+# plt.grid(True)
+# plt.xlabel('N')
+# plt.ylabel('Error')
+# plt.title('Spectral Differentiation Error vs Grid Size')
+# plt.legend()
+# plt.show()

@@ -6,7 +6,7 @@ import numpy as np
 import scipy as sp
 from scipy.stats import gaussian_kde
 
-from MetropolisHastings import MetropolisHastings
+from .MetropolisHastings import MetropolisHastings
 
 
 class MCMCDiagnostics:
