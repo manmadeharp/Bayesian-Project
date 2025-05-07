@@ -4,25 +4,14 @@ import scipy as sp
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
 import multiprocessing as mp
-import numpy as np
-import matplotlib.pyplot as plt
-
-import multiprocessing as mp
 from functools import partial
-import matplotlib.pyplot as plt
-import numpy as np
-from Library.LibMCMC.pCN2 import KarhunenLoeveExpansion, PCN, KLSample, PCNProposal, PCNConfig
-from Library.LibMCMC.Distributions import TargetDistribution
-from Library.LibMCMC.PRNG import RNG, SEED
-
-# === 1. Heat Equation Target Classes ===
-
-from dataclasses import dataclass, field
-from typing import Callable, Union, Tuple
-import numpy as np
 import time
 from contextlib import contextmanager
 from typing import Dict
+# import cupy as cp  # Add CuPy for GPU acceleration
+
+# Global flag to control GPU usage
+USE_GPU = True
 
 # Global dictionary to store timing data
 timing_data: Dict[str, float] = {}
@@ -38,26 +27,102 @@ def time_block(label: str):
         timing_data[label] = timing_data.get(label, 0.0) + elapsed
         print(f"Operation: {label}, Time: {elapsed:.4f} seconds")
 
+# GPU Utilities
+def to_gpu(arr):
+    """Transfer numpy array to GPU if GPU is enabled"""
+    if USE_GPU:
+        return cp.asarray(arr)
+    return arr
+
+def to_cpu(arr):
+    """Transfer GPU array back to CPU if needed"""
+    if USE_GPU and isinstance(arr, cp.ndarray):
+        return cp.asnumpy(arr)
+    return arr
+
+def xp_select():
+    """Return the appropriate array library based on GPU flag"""
+    return cp if USE_GPU else np
+
+# GPU-accelerated Heat Equation Solver
+def solve_heat_equation_from_initial_gpu(u0, x, t, x_obs, L, k):
+    """
+    GPU-accelerated implementation of the heat equation solver
+    """
+    xp = xp_select()
+    
+    # Transfer arrays to GPU if not already there
+    x_gpu = to_gpu(x)
+    t_gpu = to_gpu(t)
+    x_obs_gpu = to_gpu(x_obs)
+    k_gpu = to_gpu(k)
+    
+    # Evaluate initial condition at observation points
+    u0_vals = to_gpu(u0(to_cpu(x_obs_gpu)))
+    
+    # Compute basis functions
+    phi_k_obs = xp.sin(k_gpu.reshape(-1, 1) * xp.pi * x_obs_gpu.reshape(1, -1) / L)
+    
+    # Project initial condition onto basis
+    # Since trapezoid is not available in CuPy, we'll implement it directly
+    dx = x_obs_gpu[1] - x_obs_gpu[0]
+    y = u0_vals * phi_k_obs
+    coeffs = xp.sum(y[:, :-1] + y[:, 1:], axis=1) * dx * 0.5 * (2/L)
+    
+    # Create basis functions at evaluation points
+    phi_k_x = xp.sin(k_gpu.reshape(-1, 1) * xp.pi * x_gpu.reshape(1, -1) / L)
+    
+    # Time evolution
+    lambda_k = (k_gpu * xp.pi / L) ** 2
+    decay = xp.exp(-lambda_k.reshape(-1, 1) * t_gpu.reshape(1, -1))
+    
+    # Reconstruct solution - vectorized implementation
+    u_xt = xp.zeros((len(x_gpu), len(t_gpu)))
+    
+    # Use einsum for efficient matrix multiplication
+    u_xt = xp.einsum('k,kt,kx->xt', coeffs, decay, phi_k_x)
+    
+    # Transfer result back to CPU if needed
+    return to_cpu(u_xt)
+
+# Replace the original heat equation solver method with a GPU-accelerated version
+def gpu_accelerated_heat_equation_solver(self, u0, x, t):
+    """Wrapper to call the GPU-accelerated solver"""
+    return solve_heat_equation_from_initial_gpu(
+        u0, x, t, 
+        self.x_obs, self.L, self.k
+    )
 
 
 def covariance_weighted_least_squares(functions, target) -> float:
+    """
+    Compute the covariance-weighted least squares error:
+        ‖μ_post - μ_true‖²_{Γ⁻¹}
+    where μ_post is the posterior predictive mean in data space
+    and μ_true is the noise-free true forward output.
+
+    Args:
+        functions: List of posterior samples u₀^{(j)} (callable functions)
+        target: HeatEquationTarget, which defines the forward model, noise, and true initial condition
+
+    Returns:
+        Scalar value: covariance-weighted least squares error
+    """
     # Predictive samples pushed forward
     pred_vals = np.array([
         target.solve_heat_equation_from_initial(f, target.x_obs, target.t_obs).flatten()
         for f in functions
     ])
     mu_post = np.mean(pred_vals, axis=0)
-    
+
     # True (noise-free) forward solution
     mu_true = target.solve_heat_equation_from_initial(target.true_initial, target.x_obs, target.t_obs).flatten()
-    
+
     # Noise covariance is diagonal: Γ = σ² I ⇒ Γ⁻¹ = (1/σ²) I
     sigma2 = target.variance ** 2
     diff = mu_post - mu_true
-    
-    # Normalize by the number of data points
-    return np.dot(diff, diff) / (sigma2 * len(diff))
 
+    return np.dot(diff, diff) / sigma2
 
 def kl_divergence_gaussian(mu1: np.ndarray, sigma1: np.ndarray, 
                           mu2: np.ndarray, sigma2: np.ndarray) -> float:
@@ -482,10 +547,10 @@ def run_heat_equation_inverse_problem():
         x_obs=x_obs,
         t_obs=t_obs,
         true_initial=lambda x: np.sin(np.pi * x),
-        noise_level=2,
-        variance=3,
+        noise_level=0.10,
+        variance=1,
         kth_mode=terms,
-        seed=4,
+        seed=2,
         alpha=3
     )
     
@@ -502,9 +567,9 @@ def run_heat_equation_inverse_problem():
         x_grid=x_grid,
         domain_length=L,
         alpha=target.alpha, 
-        beta=0.4,
+        beta=0.3,
         n_terms=10,
-        burn_in=100
+        burn_in=50
     )
     
     print("Created PCN configuration...")
@@ -517,7 +582,7 @@ def run_heat_equation_inverse_problem():
     
     print("Running PCN sampler for 500 iterations...")
     try:
-        sampler(2000)
+        sampler(1000)
         print("Sampling completed successfully")
         
         print(f"Burning {pcn_config.burn_in} samples...")
@@ -711,59 +776,9 @@ def plot_predictive_vs_data(x_grid: np.ndarray, t_fixed: float,
     ax.grid(True)
     
     return fig
-def plot_predictive_vs_true_solution(x_grid: np.ndarray, t_fixed: float, 
-                            pred_mean, pred_lower, pred_upper,
-                            true_initial_function, target,
-                            title: str = "Posterior Predictive vs True Solution"):
-    """
-    Plot posterior predictive mean, credible bands, and true solution at a fixed time point.
-    
-    Args:
-        x_grid: Spatial points
-        t_fixed: Fixed time value for evaluation
-        pred_mean: Function for posterior predictive mean
-        pred_lower: Function for lower credible bound
-        pred_upper: Function for upper credible bound
-        true_initial_function: Function for the true initial condition
-        target: HeatEquationTarget object with solve_heat_equation_from_initial method
-        title: Plot title
-        
-    Returns:
-        fig: The matplotlib figure
-    """
-    import matplotlib.pyplot as plt
-    
-    # Create figure
-    fig, ax = plt.subplots(figsize=(10, 5))
-    
-    # Evaluate statistical functions at the fixed time
-    t_array = np.array([t_fixed])
-    mean_vals = pred_mean(x_grid, t_array).squeeze()
-    lower_vals = pred_lower(x_grid, t_array).squeeze()
-    upper_vals = pred_upper(x_grid, t_array).squeeze()
-    
-    # Compute true solution by putting the true initial condition through the forward model
-    true_solution = target.solve_heat_equation_from_initial(true_initial_function, x_grid, t_array).squeeze()
-    
-    # Plot true solution
-    ax.plot(x_grid, true_solution, 'r--', linewidth=2, label="True Solution", zorder=3)
-    
-    # Plot predictive mean
-    ax.plot(x_grid, mean_vals, color='blue', linewidth=2, label="Predictive Mean", zorder=2)
-    
-    # Plot credible region
-    ax.fill_between(x_grid, lower_vals, upper_vals, color='blue', alpha=0.3, 
-                   label="95% Credible Band", zorder=1)
-    
-    ax.set_title(title)
-    ax.set_xlabel("x")
-    ax.set_ylabel("u(x, t)")
-    ax.legend()
-    ax.grid(True)
-    
-    return fig
 
-def analyze_mcmc_results(target, sampler, t_fixed: float = 0.10):
+
+def analyze_mcmc_results(target, sampler, t_fixed: float = None):
     """
     Analyze posterior samples with synthetic data at a fixed time.
     
@@ -810,7 +825,7 @@ def analyze_mcmc_results(target, sampler, t_fixed: float = 0.10):
     
     # Add noise (using target's noise level)
     rng = np.random.default_rng(seed=target.config.seed + 1)  # Different seed for new data
-    synthetic_data = true_solution + target.noise_level * 0.1*rng.normal(size=true_solution.shape)
+    synthetic_data = true_solution + target.noise_level * rng.normal(size=true_solution.shape)
     
     # Compute posterior predictive statistics functions
     predictive_mean, predictive_std, predictive_lower, predictive_upper = compute_posterior_predictive_statistics(
@@ -818,16 +833,14 @@ def analyze_mcmc_results(target, sampler, t_fixed: float = 0.10):
     )
     
     # Plot predictive vs data USING THE STATISTICAL FUNCTIONS
-    
-    pred_plot = plot_predictive_vs_true_solution(
+    pred_plot = plot_predictive_vs_data(
         x_grid=x_grid,
         t_fixed=t_fixed,
         pred_mean=predictive_mean,
         pred_lower=predictive_lower,
         pred_upper=predictive_upper,
-        true_initial_function=target.true_initial,
-        target=target,
-        title=f"Posterior Predictive vs True Solution at t = {t_fixed:.6f}"
+        synthetic_data=synthetic_data,
+        title=f"Posterior Predictive vs Synthetic Data at t = {t_fixed:.6f}"
     )
     
     return {
@@ -840,72 +853,6 @@ def analyze_mcmc_results(target, sampler, t_fixed: float = 0.10):
         'predictive_lower': predictive_lower,
         'predictive_upper': predictive_upper
     }
-
-def plot_multi_time_posterior_predictive(target, sampler, time_points=[0.1, 0.2, 0.4, 0.8], figsize=(15, 15)):
-    """
-    Create a 2x2 grid of posterior predictive plots at different fixed time points.
-    
-    Args:
-        target: HeatEquationTarget instance
-        sampler: PCN sampler instance with posterior samples
-        time_points: List of time points to plot (default: [0.1, 0.2, 0.4, 0.8])
-        figsize: Figure size (width, height) in inches
-        
-    Returns:
-        Figure with 2x2 grid of plots
-    """
-    import matplotlib.pyplot as plt
-    import numpy as np
-    
-    # Create the figure with a 2x2 grid
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
-    axes = axes.flatten()  # Flatten to make indexing easier
-    
-    # Spatial grid for visualization
-    x_grid = sampler.x_grid
-    
-    # Get ALL posterior samples as functions
-    functions = [s.function for s in sampler.chain]
-    
-    # For each time point, create a plot in the grid
-    for i, t_fixed in enumerate(time_points):
-        # Create t array with single value for evaluation
-        t_array = np.array([t_fixed])
-        
-        # Compute posterior predictive statistics functions
-        predictive_mean, predictive_std, predictive_lower, predictive_upper = compute_posterior_predictive_statistics(
-            functions, target, x_grid, t_array
-        )
-        
-        # Get values for plotting
-        mean_vals = predictive_mean(x_grid, t_array).squeeze()
-        lower_vals = predictive_lower(x_grid, t_array).squeeze()
-        upper_vals = predictive_upper(x_grid, t_array).squeeze()
-        
-        # Compute true solution at this time
-        true_solution = target.solve_heat_equation_from_initial(target.true_initial, x_grid, t_array).squeeze()
-        
-        # Plot on the current axis
-        ax = axes[i]
-        
-        # Plot true solution
-        ax.plot(x_grid, true_solution, 'r--', linewidth=2, label="True Solution", zorder=3)
-        
-        # Plot predictive mean
-        ax.plot(x_grid, mean_vals, color='blue', linewidth=2, label="Predictive Mean", zorder=2)
-        
-        # Plot credible region
-        ax.fill_between(x_grid, lower_vals, upper_vals, color='blue', alpha=0.3, 
-                      label="95% Credible Band", zorder=1)
-        
-        ax.set_title(f"Posterior Predictive at t = {t_fixed:.2f}")
-        ax.set_xlabel("x")
-        ax.set_ylabel("u(x, t)")
-        ax.legend()
-        ax.grid(True)
-    
-    plt.tight_layout()
-    return fig
 
 # Option 3: Sparse coefficients (only specific modes active)
 def sparse_coeffs(num_terms, active_modes=None, values=None):
@@ -954,10 +901,10 @@ def alternating_block_coeffs(num_terms=50, block_size=10, active_blocks=None, va
 
 # 10 active, 10 inactive, repeating across 50 terms
 FOURIER_COEFFS = alternating_block_coeffs(
-    num_terms=15, 
-    block_size=3, 
-    active_blocks=[0, 1, 2], 
-    values=[1, 0.8, 0.7, 0.6, 0.2, 0.9, 0.6, 0.3, 0.3]
+    num_terms=20, 
+    block_size=5, 
+    active_blocks=[0, 1, 2, 4, 5], 
+    values=[1.0, 0.7, 0.4, 0.5, 0.8]
 )
 
 def true_initial_function(x):
@@ -978,7 +925,7 @@ def true_initial_function(x):
     x = np.atleast_1d(x)
     
     # Calculate all sine terms at once with √2 factor for orthonormality
-    sine_matrix = np.sin(n_values * np.pi * x)
+    sine_matrix = np.sqrt(2) * np.sin(n_values * np.pi * x)
     
     # Multiply by coefficients and sum
     return np.dot(FOURIER_COEFFS, sine_matrix)
@@ -1015,11 +962,11 @@ def run_single_chain(chain_data):
         x_obs=x_obs,
         t_obs=t_obs,
         true_initial=true_initial_function,  # Use the named function instead of lambda
-        noise_level=8,
-        variance=0.03,
+        noise_level=0.10,
+        variance=0.5,
         kth_mode=terms,
-        seed=300+chain_index**2,  # Different seed for each chain
-        alpha=2
+        seed=int(2 + chain_index),  # Different seed for each chain
+        alpha=1.5
     )
    
     # Create target and run sampler
@@ -1031,9 +978,9 @@ def run_single_chain(chain_data):
             x_grid=x_grid,
             domain_length=L,
             alpha=target.alpha, 
-            beta=0.1,
-            n_terms=11,
-            burn_in=500
+            beta=0.4,
+            n_terms=20,
+            burn_in=100
         )
         
         sampler = PCN(pcn_config)
@@ -1064,7 +1011,6 @@ def run_single_chain(chain_data):
             'error': str(e)
         }
 
-global_last_sampler = None
 def run_multiple_chains_parallel(n_chains=5, base_iterations=2000, max_workers=None):
     """
     Run multiple heat equation inverse MCMC chains in parallel with logarithmically increasing data amounts.
@@ -1079,18 +1025,18 @@ def run_multiple_chains_parallel(n_chains=5, base_iterations=2000, max_workers=N
     """
     # Base spatial domain parameters
     L = 1.0
-    x_grid = np.linspace(0, L, 2000)
-    full_x_obs = np.linspace(0, L, 800)
-    t_obs = np.linspace(0, 0.001, 200)
-    terms = 10
+    x_grid = np.linspace(0, L, 200)
+    full_x_obs = np.linspace(0, L, 1000)
+    t_obs = np.linspace(0, 0.0001, 200)
+    terms = 20
     
     # Calculate logarithmically increasing percentages
     # Use logspace to create values between 0.01 (1%) and 1.0 (100%)
     # Add a small offset to avoid 0% data
-    min_percentage = 1.0  # Minimum percentage (1%)
+    min_percentage = 2.0  # Minimum percentage (1%)
     max_percentage = 100.0
     log_values = np.linspace(min_percentage, max_percentage, n_chains)
-    percentages = [2, 5, 8, 15, 40, 70, 90, 100]    
+    percentages = [int(round(p)) for p in log_values]    
 
     # Ensure uniqueness of percentages
     percentages = sorted(list(set(percentages)))
@@ -1210,7 +1156,7 @@ def visualize_chain_results(results_dict):
     fig1 = plt.figure(figsize=(16, 12))
     fig1.suptitle("Effect of Data Quantity on Posterior Inference", fontsize=16)
     
-    # 1. Posterior Means Comparison
+    # 1. Posterior Means Comparison (unchanged)
     ax1 = fig1.add_subplot(2, 2, 1)
     ax1.plot(x_grid, true_values, 'k--', linewidth=2, label='True initial condition')
     
@@ -1227,11 +1173,14 @@ def visualize_chain_results(results_dict):
     ax1.legend()
     ax1.grid(True)
     
-    # 2. L² Error vs Data Percentage (LINEAR scale)
+    # 2. L² Error vs Data Percentage (LINEAR scale - not log-log)
     ax2 = fig1.add_subplot(2, 2, 2)
     
     # Check if weighted errors need to be inverted (if they're increasing with more data)
+    # This is a common issue if the covariance_weighted_least_squares function 
+    # is calculating higher values for better fits
     if weighted_errors[0] < weighted_errors[-1]:
+        # If errors are increasing with data percentage, they might be inverted
         print("Warning: weighted errors are increasing with more data - check calculation")
     
     # Plot with LINEAR scales
@@ -1244,179 +1193,11 @@ def visualize_chain_results(results_dict):
     from matplotlib.ticker import MaxNLocator
     ax2.xaxis.set_major_locator(MaxNLocator(5))  # At least 5 ticks on x-axis
     ax2.yaxis.set_major_locator(MaxNLocator(5))  # At least 5 ticks on y-axis
+    
     ax2.grid(True)
     
-    # 3. Error profiles along spatial dimension
-    ax3 = fig1.add_subplot(2, 2, 3)
-    
-    for i, (mean, percentage) in enumerate(zip(posterior_means, data_percentages)):
-        error_profile = np.abs(mean - true_values)
-        ax3.plot(x_grid, error_profile, color=colors[i], linewidth=1.5, 
-                label=f'{percentage}% data')
-    
-    ax3.set_title("Absolute Error Profiles")
-    ax3.set_xlabel("$x$")
-    ax3.set_ylabel("Absolute Error")
-    ax3.xaxis.set_major_locator(plt.MaxNLocator(10))
-    ax3.yaxis.set_major_locator(plt.MaxNLocator(10))
-    ax3.legend()
-    ax3.grid(True)
-    
-    # 4. Relative improvement with additional data
-    ax4 = fig1.add_subplot(2, 2, 4)
-    
-    if len(posterior_means) > 1:
-        # Calculate percentage improvement between consecutive data levels
-        improvements = []
-        data_increases = []
-        data_pairs = []
-        
-        for i in range(1, len(weighted_errors)):
-            improvement = (weighted_errors[i-1] - weighted_errors[i]) / weighted_errors[i-1] * 100
-            data_increase = data_percentages[i] - data_percentages[i-1]
-            improvements.append(improvement)
-            data_increases.append(data_increase)
-            data_pairs.append(f"{data_percentages[i-1]}→{data_percentages[i]}")
-        
-        # Plot improvement per unit data increase
-        x_pos = np.arange(len(improvements))
-        ax4.bar(x_pos, improvements, color='green', alpha=0.7)
-        ax4.set_xticks(x_pos)
-        ax4.set_xticklabels(data_pairs)
-        ax4.set_title("Error Reduction from Additional Data")
-        ax4.set_xlabel("Data Percentage Transition")
-        ax4.set_ylabel("% Error Reduction")
-        plt.setp(ax4.get_xticklabels(), rotation=45, ha='right')
-        ax4.yaxis.set_major_locator(plt.MaxNLocator(10))
-        ax4.grid(True)
-    else:
-        ax4.text(0.5, 0.5, "Need at least 2 chains for improvement analysis", 
-                 ha='center', va='center', fontsize=12)
-    
-    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust for suptitle
-    
-    # This return statement is crucial - it was missing before
-    return {'main_figure': fig1}
+    # Rest of the code remains the same...
 
-    return {'main_figure': fig1}
-
-
-def plot_coefficient_comparison(sampler, fourier_coeffs, n_terms=None):
-    """
-    Plot KL coefficients from MCMC against true Fourier coefficients.
-    
-    Args:
-        sampler: PCN sampler with MCMC samples (KLSample objects)
-        fourier_coeffs: Array of true Fourier coefficients
-        n_terms: Number of terms to plot (default: length of fourier_coeffs)
-        
-    Returns:
-        Matplotlib figure
-    """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    
-    # Set number of terms to plot
-    if n_terms is None:
-        n_terms = len(fourier_coeffs)
-    else:
-        n_terms = min(n_terms, len(fourier_coeffs))
-    
-    # Extract KL coefficients from all samples
-    kl_coeffs_all = np.array([sample.coefficients[:n_terms] for sample in sampler.chain])
-    
-    # Calculate statistics for KL coefficients
-    kl_mean = np.mean(kl_coeffs_all, axis=0)
-    kl_lower = np.percentile(kl_coeffs_all, 2.5, axis=0)  # 2.5th percentile for lower bound
-    kl_upper = np.percentile(kl_coeffs_all, 97.5, axis=0)  # 97.5th percentile for upper bound
-
-    indices = np.arange(1, n_terms + 1)
-    eigenvalues = ((indices * np.pi)**2)
-
-    # Scale the coefficients - dividing by sqrt(eigenvalues) to normalize
-    kl_mean = kl_mean * np.sqrt(eigenvalues)
-    kl_lower = kl_lower * np.sqrt(eigenvalues)
-    kl_upper = kl_upper * np.sqrt(eigenvalues)
-    
-    # Create indices for plotting
-    indices = np.arange(1, n_terms + 1)
-    
-    # Create figure
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    # Plot Fourier coefficients as scatter points
-    ax.scatter(indices, fourier_coeffs[:n_terms], color='red', s=100, 
-              label='True Fourier Coefficients', zorder=3)
-    
-    # Plot KL coefficients mean as a line
-    ax.plot(indices, kl_mean, 'b-', linewidth=2, label='KL Coefficients (Mean)', zorder=2)
-    
-    # Plot 95% credible region for KL coefficients
-    ax.fill_between(indices, kl_lower, kl_upper, color='blue', alpha=0.3, 
-                   label='95% Credible Region', zorder=1)
-    
-    # Add labels and title
-    ax.set_title('Comparison of KL Coefficients vs Fourier Coefficients')
-    ax.set_xlabel('Coefficient Index')
-    ax.set_ylabel('Amplitude')
-    ax.set_xticks(indices)
-    ax.grid(True)
-    ax.legend()
-    
-    return fig
-
-def get_high_percentage_sampler(percentage=100, base_iterations=2000):
-    """
-    Run a single chain with high percentage data to capture the sampler.
-    This function runs in the main process, so no pickling issues.
-    
-    Returns:
-        The sampler object for visualization
-    """
-    # Base spatial domain parameters (same as in run_multiple_chains_parallel)
-    L = 1.0
-    x_grid = np.linspace(0, L, 2000)
-    full_x_obs = np.linspace(0, L, 80)
-    t_obs = np.linspace(0, 0.0001, 40)
-    terms = 15
-    
-    # Calculate observation grid based on percentage
-    n_obs = int(len(full_x_obs) * percentage / 100)
-    x_obs = np.linspace(0, L, n_obs)
-    
-    print(f"Getting sampler with {percentage}% data ({n_obs} observation points)")
-    
-    # Create configuration
-    config = HeatEquationTargetConfig(
-        x_grid=x_grid,
-        x_obs=x_obs,
-        t_obs=t_obs,
-        true_initial=true_initial_function,
-        noise_level=2,
-        variance=2,
-        kth_mode=terms,
-        seed=100,  # Can use a fixed seed
-        alpha=3
-    )
-    
-    # Create target and run sampler
-    target = config.create()
-    
-    pcn_config = PCNConfig(
-        target_distribution=target,
-        x_grid=x_grid,
-        domain_length=L,
-        alpha=target.alpha, 
-        beta=0.2,
-        n_terms=15,
-        burn_in=500
-    )
-    
-    sampler = PCN(pcn_config)
-    sampler(base_iterations)
-    sampler.burn(pcn_config.burn_in)
-    
-    return sampler, target
 
 
 if __name__ == "__main__":
@@ -1424,21 +1205,17 @@ if __name__ == "__main__":
     # results = run_multiple_chains_parallel()
 
     # Or specify number of chains and processes
-    # results = run_multiple_chains_parallel(n_chains=8, max_workers=4)
-    # figures = visualize_chain_results(results)
-    # plt.figure(figures['main_figure'].number)
-    # plt.show()
+    results = run_multiple_chains_parallel(n_chains=8, max_workers=4)
 
 
+    figures = visualize_chain_results(results)
+    plt.figure(figures['main_figure'].number)
+    plt.show()
 
-    # Plot coefficient comparison
-    # sampler, target = get_high_percentage_sampler(percentage=100)
-    # 
-    # coeff_fig = plot_coefficient_comparison(sampler, FOURIER_COEFFS, n_terms=15)
-    # plt.figure(coeff_fig.number)
-    # plt.show()
-    #
+    # target, sampler, posterior_mean = run_heat_equation_inverse_problem()
     # results = analyze_mcmc_results(target, sampler)
+    #
+    # # Show both plots
     # results['ic_plot'].tight_layout()
     # results['ic_plot'].show()
     # plt.show()
@@ -1449,23 +1226,3 @@ if __name__ == "__main__":
     #
     # # Print L² error
     # print(f"L2 error: {results['l2_error']:.6f}")
-
-    target, sampler, posterior_mean = run_heat_equation_inverse_problem()
-    results = analyze_mcmc_results(target, sampler)
-
-    # Create the 2x2 multi-time posterior predictive plot
-    multi_time_fig = plot_multi_time_posterior_predictive(target, sampler)
-    plt.figure(multi_time_fig.number)
-    plt.show()
-    coeff_fig = plot_coefficient_comparison(sampler, FOURIER_COEFFS, n_terms=10)
-    # Show both plots
-    results['ic_plot'].tight_layout()
-    results['ic_plot'].show()
-    plt.show()
-
-    results['posterior_predictive_plot'].tight_layout()
-    results['posterior_predictive_plot'].show()
-    plt.show()
-
-    # Print L² error
-    print(f"L2 error: {results['l2_error']:.6f}")

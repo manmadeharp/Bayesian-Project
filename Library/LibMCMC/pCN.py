@@ -460,7 +460,7 @@ if __name__ == "__main__":
 
     # Setup grid and create target distribution
     L = 1.0  # Domain length
-    nx = 3000  # Number of grid points (also number of datapoints right now which needs to change)
+    nx = 2000  # Number of grid points (also number of datapoints right now which needs to change)
     x_grid = np.linspace(0, L, nx)
     t_grid = sp.stats.gamma.rvs(0.4, scale=1, loc=0, size=nx)/10
 #np.full(nx, 0.1)#sp.stats.uniform(loc=0, scale=0.001).rvs(size=nx)
@@ -476,7 +476,7 @@ if __name__ == "__main__":
             # Store grid information
             self.x_grid = x_grid
             self.L = x_grid[-1] - x_grid[0]  # Domain length
-            self.n_terms = 5000  # Number of terms in Fourier series
+            self.n_terms = 10  # Number of terms in Fourier series
 
             self.observations = observations  # Observation time
             self.x_obs, self.t_obs = self.observations
@@ -599,9 +599,9 @@ if __name__ == "__main__":
         initial_state=initial_state,
         x_grid=x_grid,
         domain_length=L,
-        alpha=4,  # Prior regularity
-        beta=0.2,   # PCN step size
-        n_terms=5000, # Number of KL terms
+        alpha=2,  # Prior regularity
+        beta=0.4,   # PCN step size
+        n_terms=10, # Number of KL terms
     )
 
     # Run sampler

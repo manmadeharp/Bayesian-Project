@@ -68,7 +68,7 @@ class KLTerms:
         
         k_values = np.arange(1, n_terms + 1)
         k_pi = k_values * np.pi / domain_length
-        eigenvalues = np.exp(-2 * alpha * np.log(k_pi))
+        eigenvalues = np.exp(-alpha * np.log(k_pi))
         sqrt_eigenvalues = np.sqrt(eigenvalues)
         eigenfunction_norm = np.sqrt(2 / domain_length)
         eigenfunction = lambda j, x: eigenfunction_norm * np.sin(j * np.pi * x / domain_length)
@@ -317,7 +317,7 @@ class PCN(MetropolisHastings):
         """
         Initialize the PCN sampler.
         """
-        super().__init__()
+        # super(target_distribution = config.target_distribution).__init__()
         self.kl_expansion = KarhunenLoeveExpansion(
             domain_length=config.domain_length,
             alpha=config.alpha,
@@ -394,6 +394,94 @@ class PCN(MetropolisHastings):
         """
         func = self.get_function(index)
         return func(x)
+
+    def compute_posterior_mean(self, x_grid: np.ndarray = None) -> np.ndarray:
+        """
+        Compute the empirical posterior mean function on a grid.
+        
+        Args:
+            x_grid: Grid points for evaluation. Uses self.x_grid if None.
+            
+        Returns:
+            Posterior mean function evaluated on x_grid.
+        """
+        if x_grid is None:
+            x_grid = self.x_grid
+            
+        # Evaluate all functions on the grid and average
+        function_values = np.array([s.function(x_grid) for s in self.chain])
+        return np.mean(function_values, axis=0)
+
+    def compute_posterior_variance(self, x_grid: np.ndarray = None) -> np.ndarray:
+        """
+        Compute the pointwise posterior variance on a grid.
+        
+        Args:
+            x_grid: Grid points for evaluation. Uses self.x_grid if None.
+            
+        Returns:
+            Posterior variance at each grid point.
+        """
+        if x_grid is None:
+            x_grid = self.x_grid
+            
+        function_values = np.array([s.function(x_grid) for s in self.chain])
+        posterior_mean = np.mean(function_values, axis=0)
+        
+        # Calculate variance at each point
+        return np.mean((function_values - posterior_mean)**2, axis=0)
+
+    def compute_credible_intervals(self, x_grid: np.ndarray = None, 
+                                confidence: float = 0.95) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Compute pointwise credible intervals on a grid.
+        
+        Args:
+            x_grid: Grid points for evaluation. Uses self.x_grid if None.
+            confidence: Confidence level (default: 0.95 for 95% CI)
+            
+        Returns:
+            Tuple of (lower_bound, upper_bound) for the credible interval at each grid point.
+        """
+        if x_grid is None:
+            x_grid = self.x_grid
+            
+        posterior_mean = self.compute_posterior_mean(x_grid)
+        posterior_std = np.sqrt(self.compute_posterior_variance(x_grid))
+        
+        # Calculate z-score for the given confidence level
+        z_score = sp.stats.norm.ppf((1 + confidence) / 2)
+        
+        lower_bound = posterior_mean - z_score * posterior_std
+        upper_bound = posterior_mean + z_score * posterior_std
+        
+        return lower_bound, upper_bound
+
+    def compute_posterior_covariance(self, x_grid: np.ndarray = None) -> np.ndarray:
+        """
+        Compute the posterior covariance matrix on a grid.
+        
+        Args:
+            x_grid: Grid points for evaluation. Uses self.x_grid if None.
+            
+        Returns:
+            Posterior covariance matrix of shape (len(x_grid), len(x_grid)).
+        """
+        if x_grid is None:
+            x_grid = self.x_grid
+            
+        function_values = np.array([s.function(x_grid) for s in self.chain])
+        posterior_mean = np.mean(function_values, axis=0)
+        
+        # Calculate covariance matrix
+        n_samples = len(function_values)
+        centered = function_values - posterior_mean
+        cov_matrix = np.zeros((len(x_grid), len(x_grid)))
+        
+        for i in range(n_samples):
+            cov_matrix += np.outer(centered[i], centered[i])
+        
+        return cov_matrix / n_samples
 
     def acceptance_ratio(self, current, proposed) -> np.float64:
         """
@@ -481,346 +569,3 @@ class PCN(MetropolisHastings):
 
 
 
-# class PCNProposal(Proposal):
-#     """PCN proposal using Karhunen-Loeve expansion for function spaces"""
-#
-#     def __init__(
-#         self,
-#         beta: float,
-#         kl_expansion: KarhunenLoeveExpansion,
-#         x_grid: np.ndarray,
-#     ):
-#         """
-#         Initialize PCN proposal for function spaces
-#
-#         Args:
-#             beta: Step size parameter (0 < beta < 1)
-#             kl_expansion: Karhunen-Loeve expansion for sampling
-#             x_grid: Spatial grid points
-#         """
-#         super().__init__(None, None) 
-#         self.beta = beta
-#         self.kl_expansion = kl_expansion
-#         self.x_grid = x_grid
-#         
-#     @override
-#     def propose(self, current):# -> np.ndarray:
-#         """
-#         Generate proposal using PCN dynamics with Karhunen-Loeve expansion
-#         
-#         Args:
-#             current_func: Current function (with coefficients attribute)
-#         
-#         Returns:
-#             New function from PCN dynamics
-#         """
-#         # Get coefficients from current function
-#         current_coeffs = current.phi
-#         
-#         # Generate standard normal random variables for new function
-#         if hasattr(self, 'rng'):
-#             phi = self.rng.standard_normal(self.kl_expansion.n_terms)
-#         else:
-#             phi = np.random.standard_normal(self.kl_expansion.n_terms)
-#         
-#         # PCN dynamics directly on coefficients (more efficient)
-#         proposal_coeffs = np.sqrt(1 - self.beta**2) * current_coeffs + self.beta * phi
-#         
-#         # Create function from new coefficients
-#         return self.kl_expansion.create_function_from_coefficients(proposal_coeffs)
-#
-#     @override
-#     def proposal_log_density(
-#         self, proposed, current
-#     ) -> np.float64:
-#         """
-#         Compute log density ratio for the PCN proposal
-#
-#         For PCN targeting the posterior w.r.t. prior as reference measure,
-#         this is always 0 as proposals are symmetric.
-#         """
-#         return np.float64(0.0)
-#
-#     def propose_grid(self, current: np.ndarray) -> np.ndarray:
-#         """
-#         Generate proposal using PCN dynamics with Karhunen-Loeve expansion
-#         x* = sqrt(1-beta^2)*x + beta*w, where w sim N(0,C) with C = (-Laplacian)^(-alpha)
-#         """
-#         # Use the proposal object from the parent class to generate standard normal random variables
-#         # That will be fed into the KL expansion
-#
-#         # Generate a sample from the prior N(0,C) using K-L expansion
-#         prior_sample = self.kl_expansion.sample_grid(self.x_grid)
-#
-#         # PCN proposal formula
-#         return np.sqrt(1 - self.beta**2) * current + self.beta * prior_sample
-#
-# class PCN(MetropolisHastings):
-#     """
-#     Preconditioned Crank-Nicolson algorithm for function space sampling
-#
-#     Implements dimension-independent MCMC for function space problems
-#     using the Karhunen-Loeve expansion for sampling from the prior measure.
-#     """
-#
-#     def __init__(
-#         self,
-#         target_distribution: TargetDistribution,
-#         initial_state: np.ndarray,
-#         x_grid: np.ndarray,
-#         domain_length: float = 1.0,
-#         alpha: float = 4.0,
-#         beta: float = 0.1,
-#         n_terms: int = 100,
-#     ):
-#         """
-#         Initialize PCN sampler for function space problems
-#
-#         Args:
-#             target_distribution: Target distribution to sample from
-#             initial_state: Starting point for the chain
-#             x_grid: Spatial grid points
-#             domain_length: Length of the domain [0,L]
-#             alpha: Regularity parameter for prior N(0, (-delta)^(-alpha))
-#             beta: PCN step size parameter (0 < beta < 1)
-#             n_terms: Number of terms in truncated K-L expansion
-#             reference_measure: If True, use the prior as reference measure
-#         """
-#         # Set up Karhunen-Loeve expansion
-#         kl_expansion = KarhunenLoeveExpansion(
-#             domain_length=domain_length, alpha=alpha, n_terms=n_terms
-#         )
-#
-#         # Initialize PCN proposal
-#         proposal = PCNProposal(beta=beta, kl_expansion=kl_expansion, x_grid=x_grid)
-#
-#         # Initialize the base MCMC sampler
-#         super().__init__(target_distribution, proposal, initial_state)
-#
-#         self.coeff_chain = np.zeros((self.max_size, n_terms))
-#
-#         # Store PCN-specific attributes
-#         self.kl_expansion = kl_expansion
-#         self.x_grid = x_grid
-#
-#     def get_function(self, index):
-#         """Get function from stored coefficients"""
-#         phi = self.coeff_chain[index]
-#         return self.kl_expansion.create_function_from_coefficients(phi)
-#     
-#     def get_functions(self, indices):
-#         """
-#         Reconstruct multiple functions from coefficient chain
-#         
-#         Args:
-#             indices: List of chain indices to reconstruct
-#             
-#         Returns:
-#             List of callable functions
-#         """
-#         return [self.get_function(idx) for idx in indices]
-#     
-#     def evaluate_function(self, index, x):
-#         """
-#         Directly evaluate function at specific points without full reconstruction
-#         
-#         Args:
-#             index: Chain index to evaluate
-#             x: Points to evaluate function at
-#             
-#         Returns:
-#             Function values at specified points
-#         """
-#         func = self.get_function(index)
-#         return func(x)
-#
-#     def acceptance_ratio(self, current, proposed):
-#         """
-#         Compute acceptance ratio for PCN proposal
-#
-#         If reference_measure=True, the prior contribution cancels out
-#         and only the likelihood ratio remains.
-#         """
-#         # For PCN with reference measure, only the likelihood ratio matters
-#         likelihood_ratio = self.target_distribution.log_likelihood(
-#             proposed
-#         ) - self.target_distribution.log_likelihood(current)
-#
-#         return min(np.float64(0), likelihood_ratio)
-#
-#     def __call__(self, n: int):
-#         # Resize arrays if needed
-#         if self._index + n > self.max_size:
-#             new_max = max(self.max_size * 2, self._index + n)
-#             # Resize regular chain (for backward compatibility)
-#             new_chain = np.empty((new_max, self.chain.shape[1]))
-#             new_chain[: self._index] = self.chain[: self._index]
-#             self.chain = new_chain
-#             
-#             # Resize coefficient chain
-#             new_coeff_chain = np.zeros((new_max, self.kl_expansion.n_terms))
-#             new_coeff_chain[:self._index] = self.coeff_chain[:self._index]
-#             self.coeff_chain = new_coeff_chain
-#             
-#             # Resize acceptance rates
-#             new_acceptance_rates = np.empty(new_max)
-#             new_acceptance_rates[: self._index] = self.acceptance_rates[: self._index]
-#             self.acceptance_rates = new_acceptance_rates
-#             self.max_size = new_max
-#
-#         for i in range(n): # Surely I need to add _index + i to access further values???
-#             if i == 200 and not self.burnt:
-#                 self.burn(199)
-#
-#             # Get current function
-#             current = self.get_function(self._index - 1)
-#             
-#             # Generate proposal
-#             proposed = self.proposal_distribution.propose(current)
-#             
-#             # Evaluate acceptance
-#             log_alpha = self.acceptance_ratio(current, proposed)
-#
-#             if np.log(self.uniform_rng.uniform()) < log_alpha:
-#                 # print(proposed.phi)
-#                 # Store coefficients
-#                 self.coeff_chain[self._index] = proposed.phi
-#                 # Also store function values for compatibility
-#                 # self.chain[self._index] = proposed(self.x_grid) # this might be the issue
-#                 self.acceptance_count += 1
-#             else:
-#                 self.coeff_chain[self._index] = current.phi
-#                 # self.chain[self._index] = current(self.x_grid)
-#
-#
-#
-#             self.acceptance_rates[self._index] = self.acceptance_count / self._index
-#             self._index += 1
-#
-#
-# # class KarhunenLoeveExpansion:
-# #     """
-# #     Karhunen-Loeve expansion for sampling functions from Gaussian measures
-# #     """
-# #
-# #     def __init__(
-# #         self, domain_length: float = 1.0, alpha: float = 4.0, n_terms: int = 500
-# #     ):
-# #         """
-# #         Initialize Karhunen-Loeve expansion for sampling from N(0, (-Laplacian)^(-alpha))
-# #
-# #         Args:
-# #             domain_length: Length of the domain [0,L]
-# #             alpha: Regularity parameter for covariance operator (-Laplacian)^(-alpha)
-# #             n_terms: Number of terms to use in the truncated expansion
-# #         """
-# #         self.L = domain_length
-# #         self.alpha = alpha
-# #         self.n_terms = n_terms
-# #
-# #     def create_function_from_coefficients(self, phi):
-# #         """Create a KL function with specified coefficients"""
-# #         k_values = np.arange(1, self.n_terms + 1)
-# #         k_pi = k_values * np.pi / self.L
-# #         eigenvalues = np.exp(-2 * self.alpha * np.log(k_pi))
-# #         sqrt_eigenvalues = np.sqrt(eigenvalues)
-# #         eigenfunctions = lambda x: np.sin(k_pi[:, None] * x)
-# #         
-# #         def kl_sample_function(x):
-# #             x = np.asarray(x)
-# #             return np.sum(kl_sample_function.eigenvalues[:, None] * kl_sample_function.phi[:, None] * kl_sample_function.eigenfunction(x), axis=0)
-# #             
-# #         kl_sample_function.phi = phi
-# #         kl_sample_function.eigenvalues = sqrt_eigenvalues
-# #         kl_sample_function.eigenfunction = eigenfunctions
-# #         
-# #         return kl_sample_function
-# #     
-# #     def sample(self, x_grid, rng=None):
-# #         """
-# #         Generate a sample function using the Karhunen-Loeve expansion
-# #
-# #         Args:
-# #             x_grid: Spatial grid points where function is evaluated
-# #             rng: Random number generator (if None, creates a new one)
-# #
-# #         Returns:
-# #             Sample function evaluated at x_grid points
-# #         """
-# #         # Generate random coefficients
-# #         if rng is None:
-# #             phi = np.random.standard_normal(self.n_terms)
-# #         else:
-# #             phi = rng.standard_normal(self.n_terms)
-# #             
-# #         # Use the common function creation logic
-# #         return self.create_function_from_coefficients(phi)
-# #
-# #
-# #     def compute_prior_precision(self, x_grid):
-# #         """
-# #         Compute the precision matrix for the prior using vectorized operations
-# #         """
-# #         n = len(x_grid)
-# #
-# #         # Vectorized construction of eigenfunctions matrix
-# #         # Create meshgrid of indices and positions
-# #         i_indices = np.arange(1, n + 1).reshape(
-# #             -1, 1
-# #         )  # Column vector of indices 1,...,n
-# #         x_positions = x_grid.reshape(1, -1)  # Row vector of x positions
-# #
-# #         # Compute all sine values at once
-# #         argument = (i_indices * np.pi * x_positions) / self.L
-# #         P = np.sqrt(2 / self.L) * np.sin(argument)
-# #
-# #         # Vectorized eigenvalues computation
-# #         eigenvalues = ((np.arange(1, n+1) * np.pi / self.L)**(self.alpha))
-# #         # eigenvalues = (np.arange(1, n + 1) * np.pi / self.L) ** (-self.alpha)
-# #         D = np.diag(eigenvalues)
-# #
-# #         # Compute precision matrix
-# #         precision = P @ D @ P.T
-# #
-# #         # Ensure symmetry
-# #         # precision = (precision + precision.T) / 2
-# #
-# #         return precision
-# #     def sample_grid(self, x_grid: np.ndarray, rng=None) -> np.ndarray:
-# #         """
-# #         Generate a sample function using the Karhunen-Loeve expansion
-# #
-# #         Args:
-# #             x_grid: Spatial grid points where function is evaluated
-# #             rng: Random number generator (if None, creates a new one)
-# #
-# #         Returns:
-# #             Sample function evaluated at x_grid points
-# #         """
-# #         # Generate standard normal random variables
-# #         if rng is None:
-# #             phi = np.random.standard_normal(self.n_terms)
-# #         else:
-# #             phi = rng.standard_normal(self.n_terms)
-# #
-# #         # Pre-compute k*pi values for all terms at once
-# #         k_values = np.arange(1, self.n_terms + 1)
-# #         k_pi = k_values * np.pi / self.L
-# #
-# #         # Compute eigenvalues for all k at once
-# #         eigenvalues = np.exp(-self.alpha * np.log(k_pi))     
-# #         # eigenvalues = np.power(k_pi, -self.alpha)
-# #
-# #         # Compute eigenfunctions for all x and all k at once using broadcasting
-# #         # This creates a matrix of shape (n_terms, len(x_grid))
-# #         eigenfunctions = np.sin(k_pi[:, None] * x_grid)
-# #
-# #         # Multiply each eigenfunction by its coefficient and sum
-# #         # We use broadcasting to align dimensions properly
-# #         scaled_eigenfunctions = (
-# #             np.sqrt(eigenvalues)[:, None] * eigenfunctions * phi[:, None]
-# #         )
-# #
-# #         # Sum along the k-axis (axis 0) to get the final function values
-# #         return np.sum(scaled_eigenfunctions, axis=0)
-#
